@@ -2,7 +2,7 @@ import os
 import logging
 import argparse
 
-from metrics import global_productivity_fluxes
+from metrics import global_productivity_fluxes, global_carbon_stores
 
 # user settings
 username = os.getlogin()
@@ -34,7 +34,7 @@ def create_directory(path):
         logging.info(f"Directory already exists: {path}")
 
 
-metrics = ["global_productivity_fluxes"]
+metrics = ["global_productivity_fluxes", "global_carbon_stores"]
 
         
 def main(experiment):
@@ -53,6 +53,8 @@ def main(experiment):
 
             if metric == "global_productivity_fluxes":
                 global_productivity_fluxes(data_dir, id, output_dir, logging)
+            elif metric == "global_carbon_stores":
+                global_carbon_stores(data_dir, id, output_dir, logging)
 
             
 if __name__ == "__main__":

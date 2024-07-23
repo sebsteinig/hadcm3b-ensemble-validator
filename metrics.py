@@ -60,9 +60,59 @@ def global_productivity_fluxes(data_dir, id, output_dir, logging):
         # calculate the global sum over all latitudes and longitudes
         global_sum = (ds[var_name] * area).sum(dim=['latitude', 'longitude'])
         ds_global_sum[f'global_sum_{flux}'] = global_sum * scaling_factor
+        ds_global_sum[f'global_sum_{flux}'].attrs['units'] = 'PgC/yr'
 
     # write the results to a new NetCDF file
-    output_file = f"{output_dir}/{id}_global_productivity_fluxes.combined.nc"
+    output_file = f"{output_dir}/global_productivity_fluxes/{id}_global_productivity_fluxes.combined.nc"
     ds_global_sum.to_netcdf(output_file)
 
     logging.info(f"Global productivity timeseries for id {id} saved to {output_file}.")
+
+def global_carbon_stores(data_dir, id, output_dir, logging):
+    input_files_pattern = os.path.join(data_dir, id, "pi/*.nc")
+    input_files = glob.glob(input_files_pattern)
+    
+    if not input_files:
+        logging.info(f"No files found for id {id} in {input_files_pattern}. Skipping processing.")
+        return
+
+    ds = xr.open_mfdataset(input_files, combine='by_coords', decode_times=False).squeeze()
+
+    variables = {
+        'cSoil': 'soilCarbon_mm_srf',
+        'cVeg': 'VegCarbPFT_srf',
+    }
+
+    pfts = {
+        0: 'BL',
+        1: 'NL',
+        2: 'C3',
+        3: 'C4',
+        4: 'Shrub'
+    }
+
+    # Create a new xarray.Dataset to store the results
+    ds_global_sum = xr.Dataset()
+    ds_global_sum['time'] = ds['t']
+
+    # xalculate the global sum for each variable
+    area = calculate_grid_cell_areas(ds)
+    # convert from kg C m-2 s-1 to PgC/yr
+    scaling_factor = 3600 * 24 * 360 * 1e-12
+
+    for flux in fluxes:
+        if flux in variables:
+            var_name = variables[flux]
+        else:
+            var_name = flux
+        
+        # calculate the global sum over all latitudes and longitudes
+        global_sum = (ds[var_name] * area).sum(dim=['latitude', 'longitude'])
+        ds_global_sum[f'global_sum_{flux}'] = global_sum * scaling_factor
+        ds_global_sum[f'global_sum_{flux}'].attrs['units'] = 'PgC/yr'
+
+    # write the results to a new NetCDF file
+    output_file = f"{output_dir}/global_carbon_stores/{id}_global_carbon_stores.combined.nc"
+    ds_global_sum.to_netcdf(output_file)
+
+    logging.info(f"Global carbon stores timeseries for id {id} saved to {output_file}.")
