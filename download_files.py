@@ -4,7 +4,7 @@ import logging
 import argparse
 
 # UM output streams to download
-streams = ["pi", "pj"]
+streams = ["pi", "pj", "da"]
 # user settings
 username = os.getlogin()
 # storage on BRIDGE servers
@@ -12,6 +12,8 @@ local_data_dir = f"/export/silurian/array-01/{username}/ensembles"
 # information on HPC used for model integration
 remote_data_dir = f"/user/home/{username}/dump2hold"
 remote_host = "bc4login.acrc.bris.ac.uk"
+#remote_data_dir = f"/home/bridge/tw23150/umdata"
+#remote_host = "silurian.ggy.bris.ac.uk"
 remote_user = username
 
 # set up logging
@@ -41,7 +43,10 @@ def create_directory(path):
 
 # get list of available HPC files
 def list_remote_files(remote_dir, id, stream):
-    remote_path = os.path.join(remote_dir, f"{id}*#{stream}*")
+    if stream == "da":
+        remote_path = os.path.join(remote_dir, f"{id}*#{stream}*c1+")
+    else:
+        remote_path = os.path.join(remote_dir, f"{id}*{stream}*")
     ssh_command = f"ssh {remote_user}@{remote_host} 'ls {remote_path}'"
     try:
         result = subprocess.check_output(ssh_command, shell=True, text=True)
@@ -100,7 +105,8 @@ def main(experiment):
             create_directory(stream_local_dir)
             
             remote_dir = os.path.join(remote_data_dir, id, "datam")
-            
+            #remote_dir = os.path.join(remote_data_dir, id)
+
             # get list of available files from remote server
             remote_files = list_remote_files(remote_dir, id, stream)
             logging.info(f"Found {len(remote_files)} files on remote server for ID {id} and stream {stream}")

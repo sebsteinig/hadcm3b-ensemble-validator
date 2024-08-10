@@ -4,7 +4,7 @@ import numpy as np
 import glob
 
 
-def calculate_grid_cell_areas(ds):
+def _calculate_grid_cell_areas(ds):
     R = 6371e3  # Earth radius in meters
     
     # calculate the differences in latitude and longitude in radians
@@ -22,16 +22,35 @@ def calculate_grid_cell_areas(ds):
     return area
 
 
-def global_productivity_fluxes(data_dir, id, output_dir, logging):
-    input_files_pattern = os.path.join(data_dir, id, "pj/*.nc")
+def _load_data(data_dir, id, stream, logging):
+    input_files_pattern = os.path.join(data_dir, id, f"{stream}/*.nc")
     input_files = glob.glob(input_files_pattern)
+
+    print(input_files[0:2])
     
     if not input_files:
         logging.info(f"No files found for id {id} in {input_files_pattern}. Skipping processing.")
+        return None
+
+
+    variables_to_load = ['soilCarbon_mm_srf', 'longitude', 'latitude', 't']
+
+    drop_variables = [var for var in xr.open_dataset(input_files[0], decode_times=False).variables if var not in variables_to_load]
+
+    # ds = xr.open_mfdataset(input_files[0:10], combine='by_coords', decode_times=False).squeeze()
+    ds = xr.open_mfdataset(input_files, combine='by_coords', decode_times=False, drop_variables=drop_variables).squeeze()
+
+    print(ds)
+
+    return ds
+
+
+def global_productivity_fluxes(data_dir, id, output_dir, logging):
+
+    ds = _load_data(data_dir, id, "pj", logging)
+    if ds is None:
         return
-
-    ds = xr.open_mfdataset(input_files, combine='by_coords', decode_times=False).squeeze()
-
+    
     variables = {
         'GPP': 'GPP_ym_srf',
         'NPP': 'NPP_ym_srf',
@@ -47,8 +66,8 @@ def global_productivity_fluxes(data_dir, id, output_dir, logging):
     ds_global_sum = xr.Dataset()
     ds_global_sum['time'] = ds['t']
 
-    # xalculate the global sum for each variable
-    area = calculate_grid_cell_areas(ds)
+    # calculate the global sum for each variable
+    area = _calculate_grid_cell_areas(ds)
     # convert from kg C m-2 s-1 to PgC/yr
     scaling_factor = 3600 * 24 * 360 * 1e-12
     for flux in fluxes:
@@ -68,20 +87,21 @@ def global_productivity_fluxes(data_dir, id, output_dir, logging):
 
     logging.info(f"Global productivity timeseries for id {id} saved to {output_file}.")
 
+
 def global_carbon_stores(data_dir, id, output_dir, logging):
-    input_files_pattern = os.path.join(data_dir, id, "pi/*.nc")
-    input_files = glob.glob(input_files_pattern)
-    
-    if not input_files:
-        logging.info(f"No files found for id {id} in {input_files_pattern}. Skipping processing.")
+
+    print(id)
+
+    ds = _load_data(data_dir, id, "pi", logging)
+    if ds is None:
         return
-
-    ds = xr.open_mfdataset(input_files, combine='by_coords', decode_times=False).squeeze()
-
+    
     variables = {
         'cSoil': 'soilCarbon_mm_srf',
         'cVeg': 'VegCarbPFT_srf',
     }
+
+    print(ds)
 
     pfts = {
         0: 'BL',
@@ -91,12 +111,11 @@ def global_carbon_stores(data_dir, id, output_dir, logging):
         4: 'Shrub'
     }
 
-    # Create a new xarray.Dataset to store the results
     ds_global_sum = xr.Dataset()
     ds_global_sum['time'] = ds['t']
 
-    # xalculate the global sum for each variable
-    area = calculate_grid_cell_areas(ds)
+    # calculate the global sum for each variable
+    area = _calculate_grid_cell_areas(ds)
     # convert from kg C m-2 s-1 to PgC/yr
     scaling_factor = 3600 * 24 * 360 * 1e-12
 

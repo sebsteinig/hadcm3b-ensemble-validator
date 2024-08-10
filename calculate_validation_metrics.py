@@ -2,6 +2,7 @@ import os
 import logging
 import argparse
 
+from common import parse_jobs, create_directory
 from metrics import global_productivity_fluxes, global_carbon_stores
 
 # user settings
@@ -19,37 +20,22 @@ logging.basicConfig(
     ]
 )
 
-
-# read job IDs
-def read_ids_from_log(file_path):
-    with open(file_path, 'r') as file:
-        return [line.strip() for line in file.readlines()]
+# metrics = ["global_productivity_fluxes", "global_carbon_stores"]
+metrics = ["global_carbon_stores"]
 
 
-def create_directory(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
-        logging.info(f"Created directory: {path}")
-    else:
-        logging.info(f"Directory already exists: {path}")
-
-
-metrics = ["global_productivity_fluxes", "global_carbon_stores"]
-
-        
 def main(experiment):
-    id_list = f"./id_lists/{experiment}.log"
-    ids = read_ids_from_log(id_list)
-    logging.info(f"Read {len(ids)} IDs from log file")
+    model_params = parse_jobs(f"./id_lists/{experiment}_parameters.json")
+    logging.info(f"Read {len(model_params)} IDs from log file")
     
-    for id in ids:
+    for id, params in model_params.items():
         output_dir = os.path.join(data_dir, id, "processed")
-        create_directory(output_dir)
+        create_directory(output_dir, logging)
         
         for metric in metrics:
             logging.info(f"Calculating metric: {metric}")
             metric_dir = os.path.join(output_dir, metric)
-            create_directory(metric_dir)
+            create_directory(metric_dir, logging)
 
             if metric == "global_productivity_fluxes":
                 global_productivity_fluxes(data_dir, id, output_dir, logging)
