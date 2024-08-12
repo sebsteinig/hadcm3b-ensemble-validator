@@ -3,7 +3,7 @@ import logging
 import argparse
 
 from common import parse_jobs, create_directory
-from metrics import global_productivity_fluxes, global_carbon_stores
+from metrics import global_productivity_fluxes, global_carbon_stores, global_veg_fractions
 
 # user settings
 username = os.getlogin()
@@ -21,7 +21,9 @@ logging.basicConfig(
 )
 
 # metrics = ["global_productivity_fluxes", "global_carbon_stores"]
-metrics = ["global_carbon_stores"]
+# metrics = ["global_carbon_stores"]
+# metrics = ["global_productivity_fluxes"]
+metrics = ["global_veg_fractions"]
 
 
 def main(experiment):
@@ -41,7 +43,8 @@ def main(experiment):
                 global_productivity_fluxes(data_dir, id, output_dir, logging)
             elif metric == "global_carbon_stores":
                 global_carbon_stores(data_dir, id, output_dir, logging)
-
+            elif metric == "global_veg_fractions":
+                global_veg_fractions(data_dir, id, output_dir, logging)
             
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Calculate validation metrics from UM ensemble output files.')

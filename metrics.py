@@ -25,24 +25,65 @@ def _calculate_grid_cell_areas(ds):
 def _load_data(data_dir, id, stream, logging):
     input_files_pattern = os.path.join(data_dir, id, f"{stream}/*.nc")
     input_files = glob.glob(input_files_pattern)
-
-    print(input_files[0:2])
     
     if not input_files:
         logging.info(f"No files found for id {id} in {input_files_pattern}. Skipping processing.")
         return None
 
-
-    variables_to_load = ['soilCarbon_mm_srf', 'longitude', 'latitude', 't']
-
-    drop_variables = [var for var in xr.open_dataset(input_files[0], decode_times=False).variables if var not in variables_to_load]
-
-    # ds = xr.open_mfdataset(input_files[0:10], combine='by_coords', decode_times=False).squeeze()
-    ds = xr.open_mfdataset(input_files, combine='by_coords', decode_times=False, drop_variables=drop_variables).squeeze()
-
-    print(ds)
+    ds = xr.open_mfdataset(input_files, combine='by_coords', decode_times=False).squeeze()
 
     return ds
+
+
+def _clean_time(ds):
+    if 't_1' in ds.dims:
+        ds = ds.rename({'t_1': 't'})
+    elif 't_2' in ds.dims:
+        ds = ds.rename({'t_2': 't'})
+    if 'time' in ds.dims:
+        ds = ds.drop_dims('time')
+    return ds
+    
+
+def _load_data_productivity(data_dir, id, stream, logging):
+    input_files_pattern = os.path.join(data_dir, id, f"{stream}/*nv+.nc")
+    input_files = sorted(glob.glob(input_files_pattern))
+    
+    if not input_files:
+        logging.info(f"No files found for id {id} in {input_files_pattern}. Skipping processing.")
+        return None
+    
+    # get template files
+    pi_template = xr.open_dataset('./template_files/HadCM3BL-C.pi.mm.nc', decode_times=False)
+    pi_template['GBMVegCarb_srf'].values = np.full_like(pi_template['GBMVegCarb_srf'].values, np.nan)
+    pi_template['soilCarbon_mm_srf'].values = np.full_like(pi_template['soilCarbon_mm_srf'].values, np.nan)
+
+    # Load all files iteratively and extract variables
+    datasets_veg = []
+    datasets_soil = []
+    for file in input_files:
+        ds = xr.open_dataset(file, decode_times=False)
+        if 'soilCarbon_mm_srf' in ds.variables:
+            ds_soil = _clean_time(ds['soilCarbon_mm_srf'])
+        else:
+            ds_soil = _clean_time(pi_template['soilCarbon_mm_srf'])
+        ds_soil['t'] = ds['t']
+        datasets_soil.append(ds_soil)
+
+        if 'GBMVegCarb_srf' in ds.variables:
+            ds_veg = _clean_time(ds['GBMVegCarb_srf'])
+        else:
+            ds_veg = _clean_time(pi_template['GBMVegCarb_srf'])
+        ds_veg['t'] = ds['t']
+        datasets_veg.append(ds_veg)
+
+    ds_soil_combined = xr.concat(datasets_soil, dim='t').squeeze() if datasets_soil else None
+    ds_veg_combined = xr.concat(datasets_veg, dim='t').squeeze() if datasets_veg else None
+
+    if ds_soil_combined is not None and ds_veg_combined is not None:
+        ds_combined = xr.merge([ds_soil_combined, ds_veg_combined])
+
+    return ds_combined
 
 
 def global_productivity_fluxes(data_dir, id, output_dir, logging):
@@ -90,18 +131,17 @@ def global_productivity_fluxes(data_dir, id, output_dir, logging):
 
 def global_carbon_stores(data_dir, id, output_dir, logging):
 
-    print(id)
-
-    ds = _load_data(data_dir, id, "pi", logging)
+    ds = _load_data_productivity(data_dir, id, "pi", logging)
     if ds is None:
         return
     
     variables = {
-        'cSoil': 'soilCarbon_mm_srf',
-        'cVeg': 'VegCarbPFT_srf',
+        'SOIL_C': 'soilCarbon_mm_srf',
+        'VEG_C': 'GBMVegCarb_srf',
     }
 
-    print(ds)
+    fluxes = ['VEG_C', 'SOIL_C']
+
 
     pfts = {
         0: 'BL',
@@ -116,19 +156,63 @@ def global_carbon_stores(data_dir, id, output_dir, logging):
 
     # calculate the global sum for each variable
     area = _calculate_grid_cell_areas(ds)
-    # convert from kg C m-2 s-1 to PgC/yr
-    scaling_factor = 3600 * 24 * 360 * 1e-12
+    # convert from kg C m-2 s-1 to PgC
+    scaling_factor = 1e-12
 
     for flux in fluxes:
-        if flux in variables:
-            var_name = variables[flux]
-        else:
-            var_name = flux
+        var_name = variables[flux]
         
         # calculate the global sum over all latitudes and longitudes
         global_sum = (ds[var_name] * area).sum(dim=['latitude', 'longitude'])
+        global_sum = xr.where(global_sum == 0, np.nan, global_sum)
         ds_global_sum[f'global_sum_{flux}'] = global_sum * scaling_factor
-        ds_global_sum[f'global_sum_{flux}'].attrs['units'] = 'PgC/yr'
+        ds_global_sum[f'global_sum_{flux}'].attrs['units'] = 'PgC'
+
+    # write the results to a new NetCDF file
+    output_file = f"{output_dir}/global_carbon_stores/{id}_global_carbon_stores.combined.nc"
+    ds_global_sum.to_netcdf(output_file)
+
+    logging.info(f"Global carbon stores timeseries for id {id} saved to {output_file}.")
+
+
+def global_veg_fractions(data_dir, id, output_dir, logging):
+
+    ds = _load_data_productivity(data_dir, id, "pi", logging)
+    if ds is None:
+        return
+    
+    variables = {
+        'SOIL_C': 'soilCarbon_mm_srf',
+        'VEG_C': 'GBMVegCarb_srf',
+    }
+
+    fluxes = ['VEG_C', 'SOIL_C']
+
+
+    pfts = {
+        0: 'BL',
+        1: 'NL',
+        2: 'C3',
+        3: 'C4',
+        4: 'Shrub'
+    }
+
+    ds_global_sum = xr.Dataset()
+    ds_global_sum['time'] = ds['t']
+
+    # calculate the global sum for each variable
+    area = _calculate_grid_cell_areas(ds)
+    # convert from kg C m-2 s-1 to PgC
+    scaling_factor = 1e-12
+
+    for flux in fluxes:
+        var_name = variables[flux]
+        
+        # calculate the global sum over all latitudes and longitudes
+        global_sum = (ds[var_name] * area).sum(dim=['latitude', 'longitude'])
+        global_sum = xr.where(global_sum == 0, np.nan, global_sum)
+        ds_global_sum[f'global_sum_{flux}'] = global_sum * scaling_factor
+        ds_global_sum[f'global_sum_{flux}'].attrs['units'] = 'PgC'
 
     # write the results to a new NetCDF file
     output_file = f"{output_dir}/global_carbon_stores/{id}_global_carbon_stores.combined.nc"

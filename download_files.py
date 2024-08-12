@@ -2,6 +2,11 @@ import os
 import subprocess
 import logging
 import argparse
+import glob
+import re
+import xarray as xr
+
+from common import parse_jobs, create_directory
 
 # UM output streams to download
 streams = ["pi", "pj", "da"]
@@ -25,20 +30,6 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-
-
-# read job IDs
-def read_ids_from_log(file_path):
-    with open(file_path, 'r') as file:
-        return [line.strip() for line in file.readlines()]
-
-
-def create_directory(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
-        logging.info(f"Created directory: {path}")
-    else:
-        logging.info(f"Directory already exists: {path}")
 
 
 # get list of available HPC files
@@ -90,22 +81,88 @@ def convert_to_nc(file_path):
         subprocess.run(["rm", "-f", file_path], check=True)
         subprocess.run(["rm", "-f", nc_file_path], check=True)
 
-        
+
+def _find_min_max_year(directory, pattern="*#pi*.nc"):
+    files = glob.glob(os.path.join(directory, pattern))
+    # regular expression to extract the year from the filename
+    year_pattern = re.compile(r"#pi00000(\d{4})")
+
+    years = []
+    for file in files:
+        filename = os.path.basename(file)
+        match = year_pattern.search(filename)
+        if match:
+            year = int(match.group(1))
+            years.append(year)
+
+    if not years:
+        return None, None
+
+    min_year = min(years)
+    max_year = max(years)
+
+    return min_year, max_year
+
+
+def _create_yearly_data(id, input_dir, output_dir, min_year, max_year, stream):
+    create_directory(output_dir, logging)
+    for year in range(min_year, max_year + 1):
+        expected_filepath = f"{output_dir}/{id}a#{stream}00000{year}.nc"
+        if not os.path.exists(expected_filepath):
+            monthly_files_pattern = os.path.join(input_dir, stream, f"*{stream}00000{year}*.nc")
+            monthly_files = glob.glob(monthly_files_pattern)
+            if len(monthly_files) == 12:
+                # Initialize an empty list to store the loaded datasets
+                datasets = []
+                
+                # Loop through each monthly file and process it with xarray
+                for f in monthly_files:
+                    try:
+                        # Load the dataset
+
+                        variables_to_load = ['soilCarbon_mm_srf','fracPFTs_mm_srf', 'longitude', 'latitude', 'pseudo_2']
+                        drop_variables = [var for var in xr.open_dataset(f, decode_times=False).variables if var not in variables_to_load]
+
+                        ds = xr.open_mfdataset(f, combine='by_coords', decode_times=False, drop_variables=drop_variables).squeeze()
+                        # Select the specific variable and reduce dimensions if needed
+                        # ds_selected = ds.isel(surface=0, drop=True)
+                        
+                        # Append the selected data to the list of datasets
+                        datasets.append(ds)
+                        
+                    except Exception as e:
+                        logging.error(f"Failed to process {f}. Error: {e}")
+                        continue
+                
+                if datasets:
+                    # Combine all the datasets along the time dimension
+                    average_ds = xr.concat(datasets, dim='time').mean(dim='time')
+                    
+                    try:
+                        # Save the combined dataset to a new NetCDF file
+                        average_ds.to_netcdf(expected_filepath)
+                        logging.info(f"Successfully created {expected_filepath}.")
+                    except Exception as e:
+                        logging.error(f"Failed to save {expected_filepath}. Error: {e}")
+                else:
+                    logging.error(f"No datasets found for year {year}. Skipping file creation.") 
+
+
 def main(experiment):
-    id_list = f"./id_lists/{experiment}.log"
-    ids = read_ids_from_log(id_list)
-    logging.info(f"Read {len(ids)} IDs from log file")
+    model_params = parse_jobs(f"./id_lists/{experiment}_parameters.json")
+    logging.info(f"Read {len(model_params)} IDs from log file")
     
-    for id in ids:
+    for id, params in model_params.items():
+        # if id != "xqaba":
+        #     break
         id_local_dir = os.path.join(local_data_dir, id)
-        create_directory(id_local_dir)
+        create_directory(id_local_dir, logging)
         
         for stream in streams:
             stream_local_dir = os.path.join(id_local_dir, stream)
-            create_directory(stream_local_dir)
+            create_directory(stream_local_dir, logging)
             
             remote_dir = os.path.join(remote_data_dir, id, "datam")
-            #remote_dir = os.path.join(remote_data_dir, id)
 
             # get list of available files from remote server
             remote_files = list_remote_files(remote_dir, id, stream)
@@ -123,6 +180,18 @@ def main(experiment):
                 for file in new_files:
                     download_file(remote_dir, stream_local_dir, file)
                     convert_to_nc(os.path.join(stream_local_dir, os.path.basename(file)))
+
+            # calculate annual means from the downloaded monthly files
+            # if stream == "pi":
+            #     min_year, max_year = _find_min_max_year(stream_local_dir, pattern="*#pi*.nc")
+            #     if min_year and max_year:
+            #         logging.info(f"Found min year {min_year} and max year {max_year} for ID {id} and stream {stream}")
+            #         id_yearly_dir = os.path.join(local_data_dir, id, f"{stream}_ym")
+            #         logging.info(f"Checking for yearly mean {stream} data in {id_yearly_dir}")
+            #         _create_yearly_data(id, id_local_dir, id_yearly_dir, min_year, max_year, stream)                    
+            #     else:
+            #         logging.error(f"Failed to find min and max year for ID {id} and stream {stream}")
+
 
 
 if __name__ == "__main__":

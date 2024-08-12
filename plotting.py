@@ -3,10 +3,7 @@ import matplotlib.pyplot as plt
 import os
 import pandas as pd
 import cftime
-import json
 import numpy as np
-import seaborn as sns
-from scipy.stats import linregress
 import statsmodels.api as sm
 
 
@@ -19,7 +16,7 @@ def _get_variables(metric, model_params, data_dir):
             id,
             "processed",
             metric,
-            f"{id}_global_productivity_fluxes.combined.nc",
+            f"{id}_{metric}.combined.nc",
         )
         if os.path.isfile(metric_file):
             ds = xr.open_dataset(metric_file, decode_times=False)
@@ -79,7 +76,12 @@ def add_observation_lines(ax, var):
         ax.axhline(y=50, color="k", linestyle="--", linewidth=1.0, label="target (min)")
         ax.axhline(y=60, color="k", linestyle="-", linewidth=3.0, label="target (mean)")
         ax.axhline(y=70, color="k", linestyle="--", linewidth=1.0, label="target (max)")
-
+    elif var == "global_sum_VEG_C":
+        ax.axhline(y=500, color="k", linestyle="-", linewidth=3.0, label="target (min)")
+        ax.axhline(y=600, color="k", linestyle="-", linewidth=3.0, label="target (max)")
+    elif var == "global_sum_SOIL_C":
+        ax.axhline(y=1000, color="k", linestyle="-", linewidth=3.0, label="target (min)")
+        ax.axhline(y=1500, color="k", linestyle="-", linewidth=3.0, label="target (max)")
 
 # adapted from https://stackoverflow.com/a/59756979/3565452
 def _simple_regplot(
@@ -134,23 +136,29 @@ def plot_timeseries(metric, model_params, data_dir, experiment, output_dir, logg
         axes = [axes]
 
     for ax, var in zip(axes, all_vars):
+        t_min = []
+        t_max = []
         for id, params in model_params.items():
             metric_file = os.path.join(
                 data_dir,
                 id,
                 "processed",
                 metric,
-                f"{id}_global_productivity_fluxes.combined.nc",
+                f"{id}_{metric}.combined.nc",
             )
             data = _load_data(metric_file, var, logging)
             if data is not None:
                 time = _convert_time(data)
                 units = data[var].attrs["units"]
-                ax.plot(time, data[var].values, label=f"{id}")
+                mask = np.isfinite(data[var].values)
+                ax.plot(time[mask], data[var].values[mask], label=f"{id}")
+                t_min.append(time[0])
+                t_max.append(time[-1])
 
         ax.set_xlabel("model year")
         ax.set_ylabel(units)
         ax.set_title(f"{var}", fontsize=20, fontweight="bold")
+        ax.set_xlim(min(t_min), max(t_max))
 
         # Place a single legend to the right of all subplots
         handles, labels = ax.get_legend_handles_labels()
@@ -166,9 +174,12 @@ def plot_timeseries(metric, model_params, data_dir, experiment, output_dir, logg
         add_observation_lines(ax, var)
 
     plt.tight_layout()
-    plt.subplots_adjust(top=0.95)  # make space for the legend
+    if len(all_vars) == 2:
+        plt.subplots_adjust(top=0.85)
+    elif len(all_vars) == 4:
+        plt.subplots_adjust(top=0.95)
     plt.suptitle(
-        f"HadCM3B-C / {experiment} / {metric}",
+        f"HadCM3BL-C / {experiment} / {metric}",
         fontsize=20,
         fontweight="regular",
         y=0.99,
@@ -236,7 +247,7 @@ def plot_parameter_scatter(
                     id,
                     "processed",
                     metric,
-                    f"{id}_global_productivity_fluxes.combined.nc",
+                    f"{id}_{metric}.combined.nc",
                 )
                 data = _load_data(metric_file, var, logging)
                 if data is not None:
@@ -267,7 +278,7 @@ def plot_parameter_scatter(
             ax.text(
                 0.05,
                 0.95,
-                f"N={fit.nobs}\nSlope={fit.params[1]:.2f}\nIntercept={fit.params[0]:.2f}\n$R^2$={fit.rsquared**2:.2f}",
+                f"N={fit.nobs:.0f}\nSlope={fit.params[1]:.2f}\nIntercept={fit.params[0]:.2f}\n$R^2$={fit.rsquared**2:.2f}",
                 transform=ax.transAxes,
                 fontsize=10,
                 verticalalignment="top",
@@ -283,9 +294,12 @@ def plot_parameter_scatter(
             add_observation_lines(ax, var)
 
     plt.tight_layout()
-    plt.subplots_adjust(top=0.95)
+    if len(all_vars) == 2:
+        plt.subplots_adjust(top=0.9)
+    elif len(all_vars) == 4:
+        plt.subplots_adjust(top=0.95)
     plt.suptitle(
-        f"HadCM3B-C / {experiment} / {metric} / {clim_start_year}-{clim_end_year} / BL",
+        f"HadCM3BL-C / {experiment} / {metric} / {clim_start_year}-{clim_end_year} / BL",
         fontsize=20,
         fontweight="regular",
         y=0.99,
