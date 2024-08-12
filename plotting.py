@@ -61,27 +61,35 @@ def _convert_time(ds):
     return time_values
 
 
-def add_observation_lines(ax, var):
+def add_observation_lines(ax, var, metric):
     if var == "global_sum_GPP":
         ax.axhline(
-            y=110, color="k", linestyle="--", linewidth=1.0, label="target (min)"
+            y=110, color="k", linestyle="--", linewidth=2.0, label="target (min)"
         )
         ax.axhline(
             y=120, color="k", linestyle="-", linewidth=3.0, label="target (mean)"
         )
         ax.axhline(
-            y=130, color="k", linestyle="--", linewidth=1.0, label="target (max)"
+            y=130, color="k", linestyle="--", linewidth=2.0, label="target (max)"
         )
     elif var == "global_sum_NPP":
-        ax.axhline(y=50, color="k", linestyle="--", linewidth=1.0, label="target (min)")
+        ax.axhline(y=50, color="k", linestyle="--", linewidth=2.0, label="target (min)")
         ax.axhline(y=60, color="k", linestyle="-", linewidth=3.0, label="target (mean)")
-        ax.axhline(y=70, color="k", linestyle="--", linewidth=1.0, label="target (max)")
+        ax.axhline(y=70, color="k", linestyle="--", linewidth=2.0, label="target (max)")
     elif var == "global_sum_VEG_C":
         ax.axhline(y=500, color="k", linestyle="-", linewidth=3.0, label="target (min)")
         ax.axhline(y=600, color="k", linestyle="-", linewidth=3.0, label="target (max)")
     elif var == "global_sum_SOIL_C":
         ax.axhline(y=1000, color="k", linestyle="-", linewidth=3.0, label="target (min)")
         ax.axhline(y=1500, color="k", linestyle="-", linewidth=3.0, label="target (max)")
+    
+    # get precomputed observation refrerence values
+    if metric == "global_veg_fractions":
+        ds_obs = xr.open_dataset("./observations/igbp.veg_fraction_metrics.nc", decode_times=False)
+        ax.axhline(y=ds_obs[var] - 0.1 * ds_obs[var], color="k", linestyle="--", linewidth=2.0, label="obs (min)")
+        ax.axhline(y=ds_obs[var], color="k", linestyle="-", linewidth=3.0, label="obs (mean)")
+        ax.axhline(y=ds_obs[var] + 0.1 * ds_obs[var], color="k", linestyle="--", linewidth=2.0, label="obs (max)")
+
 
 # adapted from https://stackoverflow.com/a/59756979/3565452
 def _simple_regplot(
@@ -171,13 +179,15 @@ def plot_timeseries(metric, model_params, data_dir, experiment, output_dir, logg
                 fontsize="small",
             )
 
-        add_observation_lines(ax, var)
+        add_observation_lines(ax, var, metric)
 
     plt.tight_layout()
     if len(all_vars) == 2:
         plt.subplots_adjust(top=0.85)
     elif len(all_vars) == 4:
         plt.subplots_adjust(top=0.95)
+    elif len(all_vars) == 11:
+        plt.subplots_adjust(top=0.97)
     plt.suptitle(
         f"HadCM3BL-C / {experiment} / {metric}",
         fontsize=20,
@@ -291,13 +301,15 @@ def plot_parameter_scatter(
             if i == 0:  # Only set title for the first row
                 ax.set_title(param_key, fontsize=20, fontweight="bold")
 
-            add_observation_lines(ax, var)
+            add_observation_lines(ax, var, metric)
 
     plt.tight_layout()
     if len(all_vars) == 2:
         plt.subplots_adjust(top=0.9)
     elif len(all_vars) == 4:
         plt.subplots_adjust(top=0.95)
+    elif len(all_vars) == 11:
+        plt.subplots_adjust(top=0.97)
     plt.suptitle(
         f"HadCM3BL-C / {experiment} / {metric} / {clim_start_year}-{clim_end_year} / BL",
         fontsize=20,

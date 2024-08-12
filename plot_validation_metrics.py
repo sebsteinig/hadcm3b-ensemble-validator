@@ -25,7 +25,8 @@ logging.basicConfig(
 
 # metrics = ["global_productivity_fluxes"]
 # metrics = ["global_productivity_fluxes", "global_carbon_stores"]
-metrics = ["global_carbon_stores"]
+# metrics = ["global_carbon_stores"]
+metrics = ["global_veg_fractions"]
 
     
 def main(experiment):
@@ -43,6 +44,9 @@ def main(experiment):
             plot_timeseries(metric, model_params, data_dir, experiment, output_dir, logging)
             plot_parameter_scatter(metric, model_params, data_dir, experiment, output_dir, logging, clim_start_year, clim_end_year)
         if metric in [ "global_carbon_stores" ]:
+            plot_timeseries(metric, model_params, data_dir, experiment, output_dir, logging)
+            plot_parameter_scatter(metric, model_params, data_dir, experiment, output_dir, logging, clim_start_year, clim_end_year)
+        if metric in [ "global_veg_fractions" ]:
             plot_timeseries(metric, model_params, data_dir, experiment, output_dir, logging)
             plot_parameter_scatter(metric, model_params, data_dir, experiment, output_dir, logging, clim_start_year, clim_end_year)
 
