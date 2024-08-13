@@ -2,6 +2,8 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.lines as mlines
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 import os
 import pandas as pd
 import cftime
@@ -28,7 +30,8 @@ def _get_variables(metric, model_params, data_dir):
             all_vars.extend(
                 v
                 for v in ds.data_vars
-                if v != "time" and v not in all_vars and not v.startswith("RECCAP")
+                # if v != "time" and v not in all_vars and not v.startswith("RECCAP")
+                if v != "time" and v not in all_vars
             )
     return all_vars
 
@@ -93,13 +96,13 @@ def add_observation_lines(ax, var, metric):
         ax.axhline(
             y=1500, color="k", linestyle="-", linewidth=3.0, label="target (max)"
         )
-    # get precomputed observation refrerence values
+    # get precomputed observation refrerence values (assuming +/- 5% error)
     if metric == "global_veg_fractions":
         ds_obs = xr.open_dataset(
             "./observations/igbp.veg_fraction_metrics.nc", decode_times=False
         )
         ax.axhline(
-            y=ds_obs[var] - 0.1 * ds_obs[var],
+            y=ds_obs[var] - 0.05,
             color="k",
             linestyle="--",
             linewidth=2.0,
@@ -109,7 +112,7 @@ def add_observation_lines(ax, var, metric):
             y=ds_obs[var], color="k", linestyle="-", linewidth=3.0, label="obs (mean)"
         )
         ax.axhline(
-            y=ds_obs[var] + 0.1 * ds_obs[var],
+            y=ds_obs[var] + 0.05,
             color="k",
             linestyle="--",
             linewidth=2.0,
@@ -219,16 +222,22 @@ def plot_timeseries(metric, model_params, data_dir, experiment, output_dir, logg
 
     plt.tight_layout()
     if len(all_vars) == 2:
+        tile_y = 0.99
         plt.subplots_adjust(top=0.85)
     elif len(all_vars) == 4:
         plt.subplots_adjust(top=0.95)
+        tile_y = 0.99
     elif len(all_vars) == 11:
         plt.subplots_adjust(top=0.97)
+        tile_y = 0.99
+    else:
+        plt.subplots_adjust(top=0.995)
+        tile_y = 0.999
     plt.suptitle(
         f"HadCM3BL-C / {experiment} / {metric}",
         fontsize=20,
         fontweight="regular",
-        y=0.99,
+        y=tile_y,
     )
     if len(handles) < 50:
         plt.subplots_adjust(right=0.85)  # make space for the legend
@@ -340,15 +349,21 @@ def plot_parameter_scatter(
     plt.tight_layout()
     if len(all_vars) == 2:
         plt.subplots_adjust(top=0.9)
+        tile_y = 0.99
     elif len(all_vars) == 4:
         plt.subplots_adjust(top=0.95)
+        tile_y = 0.99
     elif len(all_vars) == 11:
         plt.subplots_adjust(top=0.97)
+        tile_y = 0.99
+    else:
+        plt.subplots_adjust(top=0.995)
+        tile_y = 0.999
     plt.suptitle(
         f"HadCM3BL-C / {experiment} / {metric} / {clim_start_year}-{clim_end_year} / BL",
         fontsize=20,
         fontweight="regular",
-        y=0.99,
+        y=tile_y,
     )
 
     output_file = os.path.join(output_dir, f"{experiment}_{metric}_param_scatter.pdf")
@@ -618,3 +633,179 @@ def plot_RECCAP_stores_vs_fluxes(
         logging.info(
             f"Saved RECCAP_stores_vs_fluxes regional plot for {experiment} and realm {realm} to {output_file}"
         )
+
+def _calculate_skill_score(clim_value, target_min, target_max):
+    target_mean = (target_min + target_max) / 2
+    target_range = target_max - target_min
+    # calculate the normalized distance from the target mean
+    normalized_difference = abs(clim_value - target_mean) / target_range
+    # calculate the skill score between 0 and 1
+    # clim_value == target_mean: 1.0 
+    # clim_value == target_min or clim_value == target_max: 0.5
+    # clim_value == target_mean - target_range or clim_value == target_max + target_range: 0.0
+    # outside this range: 0.0
+    skill_score = max(0.0, 1.0 - normalized_difference)
+    return skill_score
+
+def plot_overview_table(
+    model_params, data_dir, experiment, output_dir, logging, table_metrics, clim_start_year, clim_end_year
+):
+    rows = []
+    hits = []
+
+    for id, params in model_params.items():
+        # create a dictionary to store the data for each ensemble member
+        row_data = {"ID": id}
+        hit_data = {"ID": id}
+
+        # get model parameters
+        for key, value in params.items():
+            # Get the first value for each key
+            if isinstance(value, list):
+                if key == "V_CRIT_ALPHA":
+                    row_data["V_CRIT"] = value[0]
+                else:
+                    row_data[key] = value[0]
+            elif key == "ensemble_id":
+                continue
+
+        # check ensemble member performance against target values
+        for metric_var, target in table_metrics.items():
+            # load data
+            metric_file = os.path.join(
+                data_dir,
+                id,
+                "processed",
+                target["metric_realm"],
+                f"{id}_{target['metric_realm']}.combined.nc",
+            )
+            data = _load_data(metric_file, metric_var, logging)
+            # get climatology
+            if data is not None:
+                data["t"] = _convert_time(data)
+                clim_value = float(
+                    data[metric_var]
+                    .sel(t=slice(str(clim_start_year), str(clim_end_year)))
+                    .mean()
+                    .values
+                    )
+            else:
+                clim_value = None
+
+            if clim_value is not None:
+                # compare with target values
+                skill_score = _calculate_skill_score(clim_value, target["target_min"], target["target_max"])
+                hit_data[target["short_name"]] = skill_score
+                if clim_value <= 1.0:
+                    row_data[target["short_name"]] = round(clim_value, 2)
+                else :
+                    row_data[target["short_name"]] = round(clim_value, 1)
+            else:
+                row_data[target["short_name"]] = np.nan
+                hit_data[target["short_name"]] = np.nan
+
+        # calculate overall score based on hits/misses across all metrics
+        overall_weight = sum([target["weight"] for target in table_metrics.values()])
+        if all(np.isnan(row_data[target["short_name"]]) for target in table_metrics.values()):
+            row_data["overall_score"] = np.nan
+            hit_data["overall_score"] = np.nan
+        else:
+            overall_score = sum([hit_data[target["short_name"]] * target["weight"] for target in table_metrics.values()]) / overall_weight
+            row_data["overall_score"] = round(overall_score, 2)
+            hit_data["overall_score"] = round(overall_score, 2)
+
+        # append the ensemble member data as a new row to teh table
+        rows.append(row_data)
+        hits.append(hit_data)
+
+    # Create a DataFrame from the list of rows
+    df = pd.DataFrame(rows)
+    df_hits = pd.DataFrame(hits)
+
+    # sort the DataFrame by overall score
+    df.sort_values(by="overall_score", ascending=False, inplace=True)
+
+
+    # Set the ID column as the index (optional, you can skip this if you want to keep ID as a column)
+    df.set_index("ID", inplace=False)
+    df_hits.set_index("ID", inplace=True)
+
+    # Save the DataFrame as a CSV file
+    output_file_csv = os.path.join(output_dir, f"{experiment}_overview_table.csv")
+    df.to_csv(output_file_csv, index=False)  # Save with ID as a column
+
+    # Plot the table using ax.table for more customization
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Hide the axes
+    ax.axis("tight")
+    ax.axis("off")
+
+    # Create a table at the current axes
+    table = ax.table(
+        cellText=df.values,
+        colLabels=df.columns,
+        cellLoc="center",
+        loc="center"
+    )
+
+    # Customize the table
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1.2, 1.2)  # Adjust table size
+
+    # Customize column widths
+    # col_widths = {"ID": 0.1, "F0": 0.1, "LAI_MIN": 0.1}  # Example column widths
+    # for i, col in enumerate(df.columns):
+    #     if col in col_widths:
+    #         table.auto_set_column_width([i])
+    #         table.scale(col_widths[col], 1.0)
+    #     else:
+    #         table.auto_set_column_width([i])
+
+
+    # Automatically adjust column widths based on content
+    table.auto_set_column_width(col=list(range(len(df.columns))))
+
+    print(df_hits)
+
+    cmap = cm.RdYlGn
+    norm = mcolors.Normalize(vmin=0, vmax=1.0)
+
+    # Customize cell colors
+    for (i, j), cell in table.get_celld().items():
+        if j == 0:  # ID column
+            cell.set_text_props(weight='bold')  
+            cell.set_facecolor('darkgray')
+        elif j < 8: # model parameter columns
+            cell.set_facecolor('lightgray')  
+        if i == 0:  # header row
+            cell.set_facecolor('dodgerblue')
+            cell.set_text_props(color='white', weight='bold')
+        # Check df_hits value for ID and column name of the current cell
+        id_value = df.iloc[i - 1, 0]  # Adjust index by -1 for the row to match df
+        column_name = df.columns[j]
+        
+         # color the cell based on the skill score
+        if column_name in df_hits.columns and i > 0:
+            skill_score = df_hits.loc[id_value, column_name]
+            if np.isnan(skill_score) or np.isnan(df.iloc[i - 1, j]):
+                cell.set_facecolor('white')
+            else:
+                cell_color = cmap(norm(skill_score))
+                cell.set_facecolor(cell_color)
+        elif column_name == "overall_score" and i > 0:
+            skill_score = df_hits.loc[id_value, "overall_score"]
+            if np.isnan(skill_score) or np.isnan(df.iloc[i - 1, j]):
+                cell.set_facecolor('white')
+            else:
+                cell_color = cmap(norm(overall_score))
+                cell.set_facecolor(cell_color)
+
+
+    # save the table to disk
+    output_file_png = os.path.join(output_dir, f"{experiment}_overview_table.pdf")
+    plt.savefig(output_file_png, bbox_inches="tight", pad_inches=0.1)
+    plt.close()
+
+    logging.info(f"Saved overview table for {experiment} to {output_file_csv} and {output_file_png}")

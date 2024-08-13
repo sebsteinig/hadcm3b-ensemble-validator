@@ -20,10 +20,10 @@ logging.basicConfig(
     ]
 )
 
-metrics = ["global_productivity_fluxes", "global_carbon_stores", "global_veg_fractions"]
+# metrics = ["global_productivity_fluxes", "global_carbon_stores", "global_veg_fractions"]
 # metrics = ["global_carbon_stores"]
 # metrics = ["global_productivity_fluxes"]
-# metrics = ["global_veg_fractions"]
+metrics = ["global_veg_fractions"]
 
 
 def main(experiment):

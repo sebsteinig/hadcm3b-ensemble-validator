@@ -2,8 +2,8 @@ import os
 import logging
 import argparse
 
-from common import parse_jobs, create_directory
-from plotting import plot_timeseries, plot_parameter_scatter, plot_RECCAP_stores_vs_fluxes
+from common import parse_jobs, create_directory, table_metrics
+from plotting import plot_timeseries, plot_parameter_scatter, plot_RECCAP_stores_vs_fluxes, plot_overview_table
 
 # user settings
 username = os.getlogin()
@@ -26,10 +26,10 @@ logging.basicConfig(
 # metrics = ["global_productivity_fluxes"]
 # metrics = ["global_productivity_fluxes", "global_carbon_stores", "RECCAP_stores_vs_fluxes"]
 # metrics = ["global_carbon_stores"]
-metrics = ["global_veg_fractions"]
+# metrics = ["global_veg_fractions"]
 # metrics = ["RECCAP_stores_vs_fluxes"]
+metrics = ["overview_table"]
 
-    
 def main(experiment):
     model_params = parse_jobs(f"./id_lists/{experiment}_parameters.json")
     logging.info(f"Read {len(model_params)} IDs from log file")
@@ -46,6 +46,8 @@ def main(experiment):
             plot_parameter_scatter(metric, model_params, data_dir, experiment, output_dir, logging, clim_start_year, clim_end_year)
         elif metric == "RECCAP_stores_vs_fluxes":
             plot_RECCAP_stores_vs_fluxes(model_params, data_dir, experiment, output_dir, logging, clim_start_year, clim_end_year)
+        elif metric == "overview_table":
+            plot_overview_table(model_params, data_dir, experiment, output_dir, logging, table_metrics, clim_start_year, clim_end_year)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Plot validation metrics from UM ensemble output files.')
