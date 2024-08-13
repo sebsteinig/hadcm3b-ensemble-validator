@@ -1,10 +1,15 @@
 import xarray as xr
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import matplotlib.lines as mlines
 import os
 import pandas as pd
 import cftime
 import numpy as np
 import statsmodels.api as sm
+import csv
+
+from common import load_reccap_mask
 
 
 def _get_variables(metric, model_params, data_dir):
@@ -21,7 +26,9 @@ def _get_variables(metric, model_params, data_dir):
         if os.path.isfile(metric_file):
             ds = xr.open_dataset(metric_file, decode_times=False)
             all_vars.extend(
-                v for v in ds.data_vars if v != "time" and v not in all_vars
+                v
+                for v in ds.data_vars
+                if v != "time" and v not in all_vars and not v.startswith("RECCAP")
             )
     return all_vars
 
@@ -80,15 +87,34 @@ def add_observation_lines(ax, var, metric):
         ax.axhline(y=500, color="k", linestyle="-", linewidth=3.0, label="target (min)")
         ax.axhline(y=600, color="k", linestyle="-", linewidth=3.0, label="target (max)")
     elif var == "global_sum_SOIL_C":
-        ax.axhline(y=1000, color="k", linestyle="-", linewidth=3.0, label="target (min)")
-        ax.axhline(y=1500, color="k", linestyle="-", linewidth=3.0, label="target (max)")
-    
+        ax.axhline(
+            y=1000, color="k", linestyle="-", linewidth=3.0, label="target (min)"
+        )
+        ax.axhline(
+            y=1500, color="k", linestyle="-", linewidth=3.0, label="target (max)"
+        )
     # get precomputed observation refrerence values
     if metric == "global_veg_fractions":
-        ds_obs = xr.open_dataset("./observations/igbp.veg_fraction_metrics.nc", decode_times=False)
-        ax.axhline(y=ds_obs[var] - 0.1 * ds_obs[var], color="k", linestyle="--", linewidth=2.0, label="obs (min)")
-        ax.axhline(y=ds_obs[var], color="k", linestyle="-", linewidth=3.0, label="obs (mean)")
-        ax.axhline(y=ds_obs[var] + 0.1 * ds_obs[var], color="k", linestyle="--", linewidth=2.0, label="obs (max)")
+        ds_obs = xr.open_dataset(
+            "./observations/igbp.veg_fraction_metrics.nc", decode_times=False
+        )
+        ax.axhline(
+            y=ds_obs[var] - 0.1 * ds_obs[var],
+            color="k",
+            linestyle="--",
+            linewidth=2.0,
+            label="obs (min)",
+        )
+        ax.axhline(
+            y=ds_obs[var], color="k", linestyle="-", linewidth=3.0, label="obs (mean)"
+        )
+        ax.axhline(
+            y=ds_obs[var] + 0.1 * ds_obs[var],
+            color="k",
+            linestyle="--",
+            linewidth=2.0,
+            label="obs (max)",
+        )
 
 
 # adapted from https://stackoverflow.com/a/59756979/3565452
@@ -112,14 +138,24 @@ def _simple_regplot(
         pred.predicted_mean - n_std * pred.se_mean,
         pred.predicted_mean + n_std * pred.se_mean,
         alpha=0.3,
-        color='lightcoral',
+        color="lightcoral",
     )
 
-    ax.plot(eval_x[:, 1], pred.predicted_mean - n_std * pred.se_mean, 
-            linestyle='--', color='lightcoral', **ci_kws)
-    ax.plot(eval_x[:, 1], pred.predicted_mean + n_std * pred.se_mean, 
-            linestyle='--', color='lightcoral', **ci_kws)
-    
+    ax.plot(
+        eval_x[:, 1],
+        pred.predicted_mean - n_std * pred.se_mean,
+        linestyle="--",
+        color="lightcoral",
+        **ci_kws,
+    )
+    ax.plot(
+        eval_x[:, 1],
+        pred.predicted_mean + n_std * pred.se_mean,
+        linestyle="--",
+        color="lightcoral",
+        **ci_kws,
+    )
+
     line_kws = {} if line_kws is None else line_kws
     h = ax.plot(eval_x[:, 1], pred.predicted_mean, **line_kws)
 
@@ -223,11 +259,9 @@ def plot_parameter_scatter(
         return
 
     # Number of parameters to plot
-    param_keys = list(
-        model_params[next(iter(model_params))].keys()
-    )
+    param_keys = list(model_params[next(iter(model_params))].keys())
     # clean pramater list
-    param_keys.remove("ensemble_id") 
+    param_keys.remove("ensemble_id")
     if "TUPP" in param_keys:
         param_keys.remove("TUPP")
     num_params = len(param_keys)
@@ -324,3 +358,263 @@ def plot_parameter_scatter(
 
     logging.info(f"Saved plot for {metric} to {output_file}")
 
+
+def _process_data(data, var, clim_start_year, clim_end_year):
+    data["t"] = _convert_time(data)
+    y_value = float(
+        data[var].sel(t=slice(str(clim_start_year), str(clim_end_year))).mean().values
+    )
+    if np.isnan(y_value):
+        return None
+    return y_value
+
+
+def _get_RECCAP_data(
+    model_params, data_dir, region, realm, clim_start_year, clim_end_year, logging
+):
+    x_values = []
+    y_values = []
+    for id, params in model_params.items():
+        flux_file = os.path.join(
+            data_dir,
+            id,
+            "processed",
+            f"global_productivity_fluxes",
+            f"{id}_global_productivity_fluxes.combined.nc",
+        )
+        store_file = os.path.join(
+            data_dir,
+            id,
+            "processed",
+            f"global_carbon_stores",
+            f"{id}_global_carbon_stores.combined.nc",
+        )
+        flux_ds = _load_data(flux_file, f"{region}_sum_GPP", logging)
+        store_ds = _load_data(store_file, f"{region}_sum_VEG_C", logging)
+        if flux_ds is not None and store_ds is not None:
+            if realm == "veg":
+                flux_clim = _process_data(
+                    flux_ds, f"{region}_sum_GPP", clim_start_year, clim_end_year
+                )
+                store_clim = _process_data(
+                    store_ds, f"{region}_sum_VEG_C", clim_start_year, clim_end_year
+                )
+            elif realm == "soil":
+                flux_clim = _process_data(
+                    flux_ds, f"{region}_sum_RH", clim_start_year, clim_end_year
+                )
+                store_clim = _process_data(
+                    store_ds, f"{region}_sum_SOIL_C", clim_start_year, clim_end_year
+                )
+                # tau defined as CS/soil_resp
+                if flux_clim is not None and store_clim is not None:
+                    flux_clim = store_clim / flux_clim
+
+            if flux_clim is not None and store_clim is not None:
+                x_values.append(flux_clim)
+                y_values.append(store_clim)
+            else:
+                continue
+
+    return x_values, y_values
+
+
+def _read_csv_to_dict(file_path):
+    data_dict = {}
+    with open(file_path, "r") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            variable = row.pop(
+                ""
+            )  # This will pop the first column which has the variable names
+            data_dict[variable] = {key: float(value) for key, value in row.items()}
+    return data_dict
+
+
+def _add_rectangle(ax, x_mean, x_error, y_mean, y_error):
+    # xalculate the rectangle boundaries
+    x_min, x_max = x_mean - x_error, x_mean + x_error
+    y_min, y_max = y_mean - y_error, y_mean + y_error
+
+    # Add a gray rectangle
+    rect = patches.Rectangle(
+        (x_min, y_min),  # bottom left corner
+        x_max - x_min,  # width
+        y_max - y_min,  # height
+        linewidth=1,
+        edgecolor="none",
+        facecolor="gray",
+        alpha=0.5,
+    )
+    ax.add_patch(rect)
+
+
+def _add_cross(ax, x_mean, x_error, y_mean, y_error):
+    # add a black cross for the RECCAP range
+    ax.add_line(
+        mlines.Line2D(
+            [x_mean - x_error, x_mean + x_error],
+            [y_mean, y_mean],
+            color="black",
+            linewidth=3,
+        )
+    )
+    ax.add_line(
+        mlines.Line2D(
+            [x_mean, x_mean],
+            [y_mean - y_error, y_mean + y_error],
+            color="black",
+            linewidth=3,
+        )
+    )
+
+
+def _add_legend(ax):
+    # add custom legend handles for the rectangle and cross
+    rectangle_patch = patches.Patch(color="gray", alpha=0.5, label="CMIP6")
+    cross_lines = mlines.Line2D([], [], color="black", linewidth=2, label="RECCAP2")
+    ax.legend(handles=[rectangle_patch, cross_lines])
+
+
+def _draw_RECCAP_scatter(x_values, y_values, ax, region, realm, markersize=50):
+    # add ensemble data
+    ax.scatter(
+        x_values, y_values, color="dodgerblue", edgecolor="black", s=markersize, zorder=100
+    )
+    # read in reference data from CSV
+    cmip6_mean_values = _read_csv_to_dict("./observations/stores_vs_fluxes_cmip6.csv")
+    cmip6_error_values = _read_csv_to_dict(
+        "./observations/stores_vs_fluxes_cmip6_err.csv"
+    )
+    reccap_mean_values = _read_csv_to_dict("./observations/stores_vs_fluxes_reccap.csv")
+    reccap_error_values = _read_csv_to_dict(
+        "./observations/stores_vs_fluxes_reccap_err.csv"
+    )
+
+    if realm == "veg":
+        ax.set_xlabel("GPP (PgC yr$^{-1}$)")
+        ax.set_ylabel("Veg Carbon (PgC)")
+        _add_rectangle(
+            ax,
+            cmip6_mean_values["GPP"][region],
+            cmip6_error_values["GPP"][region],
+            cmip6_mean_values["CVeg"][region],
+            cmip6_error_values["CVeg"][region],
+        )
+        _add_cross(
+            ax,
+            reccap_mean_values["GPP"][region],
+            reccap_error_values["GPP"][region],
+            reccap_mean_values["CVeg"][region],
+            reccap_error_values["CVeg"][region],
+        )
+    elif realm == "soil":
+        ax.set_xlabel("tau (yrs)")
+        ax.set_ylabel("Soil Carbon (PgC)")
+        _add_rectangle(
+            ax,
+            cmip6_mean_values["Tau"][region],
+            cmip6_error_values["Tau"][region],
+            cmip6_mean_values["CSoil"][region],
+            cmip6_error_values["CSoil"][region],
+        )
+        _add_cross(
+            ax,
+            reccap_mean_values["Tau"][region],
+            reccap_error_values["Tau"][region],
+            reccap_mean_values["CSoil"][region],
+            reccap_error_values["CSoil"][region],
+        )
+
+    ax.set_title(region)
+
+    _add_legend(ax)
+
+
+def plot_RECCAP_stores_vs_fluxes(
+    model_params,
+    data_dir,
+    experiment,
+    output_dir,
+    logging,
+    clim_start_year,
+    clim_end_year,
+):
+
+    # start with global plots of Veg carbon vs GPP and Soil carbon vs. tau (CS/soil_resp)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+
+    x_values, y_values = _get_RECCAP_data(
+        model_params, data_dir, "global", "veg", clim_start_year, clim_end_year, logging
+    )
+    _draw_RECCAP_scatter(x_values, y_values, axes[0], "global", "veg", 50)
+
+    x_values, y_values = _get_RECCAP_data(
+        model_params,
+        data_dir,
+        "global",
+        "soil",
+        clim_start_year,
+        clim_end_year,
+        logging,
+    )
+    _draw_RECCAP_scatter(x_values, y_values, axes[1], "global", "soil", 50)
+
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.85)
+    plt.suptitle(
+        f"HadCM3BL-C / {experiment} / RECCAP_stores_vs_fluxes / {clim_start_year}-{clim_end_year} / global",
+        fontsize=16,
+        fontweight="regular",
+        y=0.99,
+    )
+
+    output_file = os.path.join(output_dir, f"{experiment}_RECCAP_global_scatter.pdf")
+
+    plt.savefig(output_file)
+    plt.close(fig)
+
+    logging.info(
+        f"Saved RECCAP_stores_vs_fluxes global plot for {experiment} to {output_file}"
+    )
+
+    # now panel plots for each region, separated by realm
+    realms = ["veg", "soil"]
+    reccap_mask, regions = load_reccap_mask()
+
+    for realm in realms:
+        fig, axes = plt.subplots(4, 3, figsize=(15, 20))
+        for i, region in enumerate(regions.values()):
+            x_values, y_values = _get_RECCAP_data(
+                model_params,
+                data_dir,
+                f"RECCAP_{region}",
+                realm,
+                clim_start_year,
+                clim_end_year,
+                logging,
+            )
+            _draw_RECCAP_scatter(x_values, y_values, axes.flatten()[i], region, realm, 100)
+
+        axes[3,1].remove()
+        axes[3,2].remove()
+
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.95)
+        plt.suptitle(
+            f"HadCM3BL-C / {experiment} / RECCAP_stores_vs_fluxes / {clim_start_year}-{clim_end_year} / regional",
+            fontsize=16,
+            fontweight="regular",
+            y=0.99,
+        )
+
+        output_file = os.path.join(
+            output_dir, f"{experiment}_RECCAP_regional_scatter_{realm}.pdf"
+        )
+
+        plt.savefig(output_file)
+        plt.close(fig) 
+
+        logging.info(
+            f"Saved RECCAP_stores_vs_fluxes regional plot for {experiment} and realm {realm} to {output_file}"
+        )

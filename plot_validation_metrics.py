@@ -3,7 +3,7 @@ import logging
 import argparse
 
 from common import parse_jobs, create_directory
-from plotting import plot_timeseries, plot_parameter_scatter
+from plotting import plot_timeseries, plot_parameter_scatter, plot_RECCAP_stores_vs_fluxes
 
 # user settings
 username = os.getlogin()
@@ -24,9 +24,10 @@ logging.basicConfig(
 )
 
 # metrics = ["global_productivity_fluxes"]
-# metrics = ["global_productivity_fluxes", "global_carbon_stores"]
+# metrics = ["global_productivity_fluxes", "global_carbon_stores", "RECCAP_stores_vs_fluxes"]
 # metrics = ["global_carbon_stores"]
 metrics = ["global_veg_fractions"]
+# metrics = ["RECCAP_stores_vs_fluxes"]
 
     
 def main(experiment):
@@ -40,16 +41,11 @@ def main(experiment):
     
     # create one output file for each metric
     for metric in metrics:
-        if metric in [ "global_productivity_fluxes" ]:
+        if metric in [ "global_productivity_fluxes", "global_carbon_stores", "global_veg_fractions" ]:
             plot_timeseries(metric, model_params, data_dir, experiment, output_dir, logging)
             plot_parameter_scatter(metric, model_params, data_dir, experiment, output_dir, logging, clim_start_year, clim_end_year)
-        if metric in [ "global_carbon_stores" ]:
-            plot_timeseries(metric, model_params, data_dir, experiment, output_dir, logging)
-            plot_parameter_scatter(metric, model_params, data_dir, experiment, output_dir, logging, clim_start_year, clim_end_year)
-        if metric in [ "global_veg_fractions" ]:
-            plot_timeseries(metric, model_params, data_dir, experiment, output_dir, logging)
-            plot_parameter_scatter(metric, model_params, data_dir, experiment, output_dir, logging, clim_start_year, clim_end_year)
-
+        elif metric == "RECCAP_stores_vs_fluxes":
+            plot_RECCAP_stores_vs_fluxes(model_params, data_dir, experiment, output_dir, logging, clim_start_year, clim_end_year)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Plot validation metrics from UM ensemble output files.')

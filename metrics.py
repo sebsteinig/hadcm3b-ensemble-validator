@@ -3,6 +3,7 @@ import xarray as xr
 import numpy as np
 import glob
 
+from common import load_reccap_mask
 
 def _calculate_grid_cell_areas(ds):
     R = 6371e3  # Earth radius in meters
@@ -96,6 +97,7 @@ def _load_data_pi(data_dir, id, stream, logging, variables):
 
     # Load all files iteratively and extract variables
     for file in input_files:
+        print(file)
         ds = xr.open_dataset(file, decode_times=False)
 
         for var in variables:
@@ -119,7 +121,7 @@ def _load_data_pi(data_dir, id, stream, logging, variables):
         return ds_final_combined
 
     return None
-
+    
 
 def global_productivity_fluxes(data_dir, id, output_dir, logging):
 
@@ -134,7 +136,10 @@ def global_productivity_fluxes(data_dir, id, output_dir, logging):
     # list of variables to process
     fluxes = ["GPP", "NPP", "RH", "NEP"]
 
-    # Create a new xarray.Dataset to store the results
+    # get the RECCAP mask for regional means
+    reccap_mask, regions = load_reccap_mask()
+
+    # create a new xarray.Dataset to store the results
     ds_global_sum = xr.Dataset()
     ds_global_sum["time"] = ds["t"]
 
@@ -152,6 +157,20 @@ def global_productivity_fluxes(data_dir, id, output_dir, logging):
         global_sum = (ds[var_name] * area).sum(dim=["latitude", "longitude"])
         ds_global_sum[f"global_sum_{flux}"] = global_sum * scaling_factor
         ds_global_sum[f"global_sum_{flux}"].attrs["units"] = "PgC/yr"
+
+        # also calculate the sum for each RECCAP region
+        for region_id, region_name in regions.items():
+            # create a mask for the current region
+            if region_name == "Africa": # combine North Africa and South Africa
+                region_mask = (reccap_mask["Region_Map"] == 4) | (reccap_mask["Region_Map"] == 5)
+            else:
+                region_mask = reccap_mask["Region_Map"] == region_id
+            masked_area = area.where(region_mask)
+            regional_sum = (ds[var_name] * masked_area).sum(dim=["latitude", "longitude"])
+            
+            # Store the regional mean in the dataset
+            ds_global_sum[f"RECCAP_{region_name}_sum_{flux}"] = regional_sum * scaling_factor
+            ds_global_sum[f"RECCAP_{region_name}_sum_{flux}"].attrs["units"] = "PgC/yr"
 
     # write the results to a new NetCDF file
     output_file = f"{output_dir}/global_productivity_fluxes/{id}_global_productivity_fluxes.combined.nc"
@@ -174,7 +193,8 @@ def global_carbon_stores(data_dir, id, output_dir, logging):
 
     fluxes = ["VEG_C", "SOIL_C"]
 
-    pfts = {0: "BL", 1: "NL", 2: "C3", 3: "C4", 4: "Shrub"}
+    # get the RECCAP mask for regional means
+    reccap_mask, regions = load_reccap_mask()
 
     ds_global_sum = xr.Dataset()
     ds_global_sum["time"] = ds["t"]
@@ -192,6 +212,21 @@ def global_carbon_stores(data_dir, id, output_dir, logging):
         global_sum = xr.where(global_sum == 0, np.nan, global_sum)
         ds_global_sum[f"global_sum_{flux}"] = global_sum * scaling_factor
         ds_global_sum[f"global_sum_{flux}"].attrs["units"] = "PgC"
+
+        # also calculate the sum for each RECCAP region
+        for region_id, region_name in regions.items():
+            # create a mask for the current region
+            if region_name == "Africa": # combine North Africa and South Africa
+                region_mask = (reccap_mask["Region_Map"] == 4) | (reccap_mask["Region_Map"] == 5)
+            else:
+                region_mask = reccap_mask["Region_Map"] == region_id
+            masked_area = area.where(region_mask)
+            regional_sum = (ds[var_name] * masked_area).sum(dim=["latitude", "longitude"])
+            regional_sum = xr.where(regional_sum == 0, np.nan, regional_sum)
+
+            # Store the regional mean in the dataset
+            ds_global_sum[f"RECCAP_{region_name}_sum_{flux}"] = regional_sum * scaling_factor
+            ds_global_sum[f"RECCAP_{region_name}_sum_{flux}"].attrs["units"] = "PgC"
 
     # write the results to a new NetCDF file
     output_file = (

@@ -1,5 +1,6 @@
 import os
 import json
+import xarray as xr
 
 def parse_jobs(filename):
     """
@@ -30,3 +31,20 @@ def create_directory(path, logging):
         logging.info(f"Created directory: {path}")
     else:
         logging.info(f"Directory already exists: {path}")
+
+
+def load_reccap_mask():
+    reccap_mask = xr.open_dataset("./observations/RECCAP_AfricaSplit_MASK11_Mask_regridded.hadcm3bl_grid.nc")
+    regions = {
+        1: "North_America",
+        2: "South_America",
+        3: "Europe",
+        4: "Africa", # combine North Africa (=4) and South Africa (+5)
+        6: "North_Asia",
+        7: "Central_Asia",
+        8: "East_Asia",
+        9: "South_Asia",
+        10: "South_East_Asia",
+        11: "Oceania",
+    }
+    return reccap_mask, regions
