@@ -70,12 +70,13 @@ def _clean_time(ds):
 
 
 def _load_data_pi(data_dir, id, stream, logging, variables):
-    input_files_pattern = os.path.join(data_dir, id, f"{stream}/*nv+.nc")
-    input_files = sorted(glob.glob(input_files_pattern))
+    input_files_pattern_1 = os.path.join(data_dir, id, f"{stream}/*nv+.nc")
+    input_files_pattern_2 = os.path.join(data_dir, id, f"{stream}/*nov+.nc")
+    input_files = sorted(glob.glob(input_files_pattern_1) + glob.glob(input_files_pattern_2))
 
     if not input_files:
         logging.info(
-            f"No files found for id {id} in {input_files_pattern}. Skipping processing."
+            f"No files found for id {id} in {input_files_pattern_1}. Skipping processing."
         )
         return None
 
@@ -105,7 +106,7 @@ def _load_data_pi(data_dir, id, stream, logging, variables):
                 ds_var = _clean_time(ds[var])
             else:
                 ds_var = _clean_time(placeholder_templates[var])
-            ds_var["t"] = ds["t"] - 337.0  # account for November files
+            ds_var["t"] = ds["t"] - 300.0  # account for November files
             combined_datasets[var].append(ds_var)
 
     # Combine all datasets for each variable along the 't' dimension
@@ -248,13 +249,12 @@ def _calculate_veg_metrics(ds, var_name, surface_name):
     # calculate the global mean for each PFT
     pfts = {0: "BL", 1: "NL", 2: "C3", 3: "C4", 4: "shrub", 7: "bare_soil"}
     for pft_id, pft_name in pfts.items():
-        global_mean = (
-            ds[var_name]
-            .isel({surface_name: pft_id})
-            .weighted(area)
-            .mean(dim=["latitude", "longitude"])
-        )
+        data_2d = ds[var_name].isel({surface_name: pft_id})
+        global_mean = data_2d.weighted(area).mean(dim=["latitude", "longitude"])
+        
         ds_global_mean[f"global_mean_{pft_name}"] = global_mean
+        # also store the 2D data for each PFT
+        ds_global_mean[f"{pft_name}_2D"] = data_2d
 
     # some aggregates
     ds_global_mean[f"global_mean_trees"] = (

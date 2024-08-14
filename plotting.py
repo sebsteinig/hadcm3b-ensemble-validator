@@ -10,8 +10,10 @@ import cftime
 import numpy as np
 import statsmodels.api as sm
 import csv
+import cartopy.crs as ccrs
 
-from common import load_reccap_mask
+from common import load_reccap_mask, read_csv_to_dict
+from tqdm import tqdm
 
 
 def _get_variables(metric, model_params, data_dir):
@@ -122,10 +124,16 @@ def add_observation_lines(ax, var, metric):
 
 # adapted from https://stackoverflow.com/a/59756979/3565452
 def _simple_regplot(
-    x, y, n_std=2, n_pts=100, ax=None, scatter_kws=None, line_kws=None, ci_kws=None
+    x, y, n_std=2, n_pts=100, ax=None, scatter_kws=None, line_kws=None, ci_kws=None, highlight_ids=None, x_values_highlight=None, y_values_highlight=None
 ):
     """Draw a regression line with error interval."""
     ax = plt.gca() if ax is None else ax
+
+    # filter out nan values
+    mask = np.isfinite(x) & np.isfinite(y)
+    print(mask)
+    x = x[mask]
+    y = y[mask]
 
     # calculate best-fit line and interval
     x_fit = sm.add_constant(x)
@@ -165,6 +173,16 @@ def _simple_regplot(
     # draw the scatterplot
     scatter_kws = {} if scatter_kws is None else scatter_kws
     ax.scatter(x, y, **scatter_kws)
+
+    # highlight specific points
+    if highlight_ids is not None:
+        for j, (id, description) in enumerate(highlight_ids.items()):
+            ax.scatter(
+                x_values_highlight[j],
+                y_values_highlight[j],
+                color="red",
+                label=f"{id} ({description})",
+            )
 
     return fit_results
 
@@ -258,6 +276,7 @@ def plot_parameter_scatter(
     logging,
     clim_start_year,
     clim_end_year,
+    highlight_ids=None,
 ):
     # Get all variables to be plotted
     all_vars = _get_variables(metric, model_params, data_dir)
@@ -293,6 +312,8 @@ def plot_parameter_scatter(
             ax = axes[i][j]
             x_values = []
             y_values = []
+            x_values_highlight = []
+            y_values_highlight = []
 
             for id, params in model_params.items():
                 metric_file = os.path.join(
@@ -317,6 +338,9 @@ def plot_parameter_scatter(
                     x_values.append(x_value)
                     y_values.append(y_value)
                     units = data[var].attrs["units"]
+                    if id in highlight_ids:
+                        x_values_highlight.append(x_value)
+                        y_values_highlight.append(y_value)
 
             fit = _simple_regplot(
                 x_values,
@@ -327,7 +351,11 @@ def plot_parameter_scatter(
                 scatter_kws={"color": "dodgerblue", "edgecolor": "black", "s": 50},
                 line_kws={"color": "red", "linestyle": "-", "linewidth": 2},
                 ci_kws=None,
+                highlight_ids=highlight_ids,
+                x_values_highlight=x_values_highlight,
+                y_values_highlight=y_values_highlight,
             )
+            print(x_valaues_highlight)
             ax.text(
                 0.05,
                 0.95,
@@ -434,18 +462,6 @@ def _get_RECCAP_data(
     return x_values, y_values
 
 
-def _read_csv_to_dict(file_path):
-    data_dict = {}
-    with open(file_path, "r") as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            variable = row.pop(
-                ""
-            )  # This will pop the first column which has the variable names
-            data_dict[variable] = {key: float(value) for key, value in row.items()}
-    return data_dict
-
-
 def _add_rectangle(ax, x_mean, x_error, y_mean, y_error):
     # xalculate the rectangle boundaries
     x_min, x_max = x_mean - x_error, x_mean + x_error
@@ -494,15 +510,20 @@ def _add_legend(ax):
 def _draw_RECCAP_scatter(x_values, y_values, ax, region, realm, markersize=50):
     # add ensemble data
     ax.scatter(
-        x_values, y_values, color="dodgerblue", edgecolor="black", s=markersize, zorder=100
+        x_values,
+        y_values,
+        color="dodgerblue",
+        edgecolor="black",
+        s=markersize,
+        zorder=100,
     )
     # read in reference data from CSV
-    cmip6_mean_values = _read_csv_to_dict("./observations/stores_vs_fluxes_cmip6.csv")
-    cmip6_error_values = _read_csv_to_dict(
+    cmip6_mean_values = read_csv_to_dict("./observations/stores_vs_fluxes_cmip6.csv")
+    cmip6_error_values = read_csv_to_dict(
         "./observations/stores_vs_fluxes_cmip6_err.csv"
     )
-    reccap_mean_values = _read_csv_to_dict("./observations/stores_vs_fluxes_reccap.csv")
-    reccap_error_values = _read_csv_to_dict(
+    reccap_mean_values = read_csv_to_dict("./observations/stores_vs_fluxes_reccap.csv")
+    reccap_error_values = read_csv_to_dict(
         "./observations/stores_vs_fluxes_reccap_err.csv"
     )
 
@@ -609,10 +630,12 @@ def plot_RECCAP_stores_vs_fluxes(
                 clim_end_year,
                 logging,
             )
-            _draw_RECCAP_scatter(x_values, y_values, axes.flatten()[i], region, realm, 100)
+            _draw_RECCAP_scatter(
+                x_values, y_values, axes.flatten()[i], region, realm, 100
+            )
 
-        axes[3,1].remove()
-        axes[3,2].remove()
+        axes[3, 1].remove()
+        axes[3, 2].remove()
 
         plt.tight_layout()
         plt.subplots_adjust(top=0.95)
@@ -628,11 +651,12 @@ def plot_RECCAP_stores_vs_fluxes(
         )
 
         plt.savefig(output_file)
-        plt.close(fig) 
+        plt.close(fig)
 
         logging.info(
             f"Saved RECCAP_stores_vs_fluxes regional plot for {experiment} and realm {realm} to {output_file}"
         )
+
 
 def _calculate_skill_score(clim_value, target_min, target_max):
     target_mean = (target_min + target_max) / 2
@@ -640,20 +664,29 @@ def _calculate_skill_score(clim_value, target_min, target_max):
     # calculate the normalized distance from the target mean
     normalized_difference = abs(clim_value - target_mean) / target_range
     # calculate the skill score between 0 and 1
-    # clim_value == target_mean: 1.0 
+    # clim_value == target_mean: 1.0
     # clim_value == target_min or clim_value == target_max: 0.5
     # clim_value == target_mean - target_range or clim_value == target_max + target_range: 0.0
     # outside this range: 0.0
     skill_score = max(0.0, 1.0 - normalized_difference)
     return skill_score
 
+
 def plot_overview_table(
-    model_params, data_dir, experiment, output_dir, logging, table_metrics, clim_start_year, clim_end_year
+    model_params,
+    data_dir,
+    experiment,
+    output_dir,
+    logging,
+    table_metrics,
+    clim_start_year,
+    clim_end_year,
 ):
     rows = []
     hits = []
 
-    for id, params in model_params.items():
+    # for id, params in model_params.items():
+    for id, params in tqdm(model_params.items(), desc="Processing IDs"):
         # create a dictionary to store the data for each ensemble member
         row_data = {"ID": id}
         hit_data = {"ID": id}
@@ -670,7 +703,7 @@ def plot_overview_table(
                 continue
 
         # check ensemble member performance against target values
-        for metric_var, target in table_metrics.items():
+        for metric_key, target in table_metrics.items():
             # load data
             metric_file = os.path.join(
                 data_dir,
@@ -679,38 +712,76 @@ def plot_overview_table(
                 target["metric_realm"],
                 f"{id}_{target['metric_realm']}.combined.nc",
             )
-            data = _load_data(metric_file, metric_var, logging)
+            data = _load_data(metric_file, target["var_name"], logging)
             # get climatology
             if data is not None:
                 data["t"] = _convert_time(data)
                 clim_value = float(
-                    data[metric_var]
+                    data[target["var_name"]]
                     .sel(t=slice(str(clim_start_year), str(clim_end_year)))
                     .mean()
                     .values
-                    )
+                )
             else:
                 clim_value = None
 
+            if metric_key.startswith("Tau_"):
+                # load additional data for soil carbon to calculate tau = CS/soil_resp
+                metric_file = os.path.join(
+                    data_dir,
+                    id,
+                    "processed",
+                    "global_carbon_stores",
+                    f"{id}_global_carbon_stores.combined.nc",
+                )
+                cs_var_name = target["var_name"].replace("RH", "SOIL_C")
+                data = _load_data(metric_file, cs_var_name, logging)
+                if data is not None:
+                    data["t"] = _convert_time(data)
+                    cs_clim = float(
+                        data[cs_var_name]
+                        .sel(t=slice(str(clim_start_year), str(clim_end_year)))
+                        .mean()
+                        .values
+                    )
+                else:
+                    cs_clim = None
+
+                if clim_value is not None and cs_clim is not None:
+                    clim_value = cs_clim / clim_value
+                else:
+                    clim_value = None
+
             if clim_value is not None:
                 # compare with target values
-                skill_score = _calculate_skill_score(clim_value, target["target_min"], target["target_max"])
-                hit_data[target["short_name"]] = skill_score
+                skill_score = _calculate_skill_score(
+                    clim_value, target["target_min"], target["target_max"]
+                )
+                hit_data[metric_key] = skill_score
                 if clim_value <= 1.0:
-                    row_data[target["short_name"]] = round(clim_value, 2)
-                else :
-                    row_data[target["short_name"]] = round(clim_value, 1)
+                    row_data[metric_key] = round(clim_value, 2)
+                else:
+                    row_data[metric_key] = round(clim_value, 1)
             else:
-                row_data[target["short_name"]] = np.nan
-                hit_data[target["short_name"]] = np.nan
+                row_data[metric_key] = np.nan
+                hit_data[metric_key] = np.nan
 
         # calculate overall score based on hits/misses across all metrics
         overall_weight = sum([target["weight"] for target in table_metrics.values()])
-        if all(np.isnan(row_data[target["short_name"]]) for target in table_metrics.values()):
+        if all(np.isnan(row_data[metric_key]) for target in table_metrics.values()):
             row_data["overall_score"] = np.nan
             hit_data["overall_score"] = np.nan
         else:
-            overall_score = sum([hit_data[target["short_name"]] * target["weight"] for target in table_metrics.values()]) / overall_weight
+            overall_score = (
+                sum(
+                    [
+                        hit_data[target] * table_metrics[target]["weight"]
+                        for target in table_metrics.keys()
+                    ]
+                )
+                / overall_weight
+            )
+
             row_data["overall_score"] = round(overall_score, 2)
             hit_data["overall_score"] = round(overall_score, 2)
 
@@ -724,7 +795,6 @@ def plot_overview_table(
 
     # sort the DataFrame by overall score
     df.sort_values(by="overall_score", ascending=False, inplace=True)
-
 
     # Set the ID column as the index (optional, you can skip this if you want to keep ID as a column)
     df.set_index("ID", inplace=False)
@@ -743,26 +813,13 @@ def plot_overview_table(
 
     # Create a table at the current axes
     table = ax.table(
-        cellText=df.values,
-        colLabels=df.columns,
-        cellLoc="center",
-        loc="center"
+        cellText=df.values, colLabels=df.columns, cellLoc="center", loc="center"
     )
 
     # Customize the table
     table.auto_set_font_size(False)
     table.set_fontsize(10)
     table.scale(1.2, 1.2)  # Adjust table size
-
-    # Customize column widths
-    # col_widths = {"ID": 0.1, "F0": 0.1, "LAI_MIN": 0.1}  # Example column widths
-    # for i, col in enumerate(df.columns):
-    #     if col in col_widths:
-    #         table.auto_set_column_width([i])
-    #         table.scale(col_widths[col], 1.0)
-    #     else:
-    #         table.auto_set_column_width([i])
-
 
     # Automatically adjust column widths based on content
     table.auto_set_column_width(col=list(range(len(df.columns))))
@@ -775,37 +832,350 @@ def plot_overview_table(
     # Customize cell colors
     for (i, j), cell in table.get_celld().items():
         if j == 0:  # ID column
-            cell.set_text_props(weight='bold')  
-            cell.set_facecolor('darkgray')
-        elif j < 8: # model parameter columns
-            cell.set_facecolor('lightgray')  
+            cell.set_text_props(weight="bold")
+            cell.set_facecolor("darkgray")
+        elif j < 8:  # model parameter columns
+            cell.set_facecolor("lightgray")
         if i == 0:  # header row
-            cell.set_facecolor('dodgerblue')
-            cell.set_text_props(color='white', weight='bold')
+            cell.set_facecolor("dodgerblue")
+            cell.set_text_props(color="white", weight="bold")
         # Check df_hits value for ID and column name of the current cell
         id_value = df.iloc[i - 1, 0]  # Adjust index by -1 for the row to match df
         column_name = df.columns[j]
-        
-         # color the cell based on the skill score
+
+        # color the cell based on the skill score
         if column_name in df_hits.columns and i > 0:
             skill_score = df_hits.loc[id_value, column_name]
             if np.isnan(skill_score) or np.isnan(df.iloc[i - 1, j]):
-                cell.set_facecolor('white')
+                cell.set_facecolor("white")
             else:
                 cell_color = cmap(norm(skill_score))
                 cell.set_facecolor(cell_color)
         elif column_name == "overall_score" and i > 0:
             skill_score = df_hits.loc[id_value, "overall_score"]
             if np.isnan(skill_score) or np.isnan(df.iloc[i - 1, j]):
-                cell.set_facecolor('white')
+                cell.set_facecolor("white")
             else:
                 cell_color = cmap(norm(overall_score))
                 cell.set_facecolor(cell_color)
-
 
     # save the table to disk
     output_file_png = os.path.join(output_dir, f"{experiment}_overview_table.pdf")
     plt.savefig(output_file_png, bbox_inches="tight", pad_inches=0.1)
     plt.close()
 
-    logging.info(f"Saved overview table for {experiment} to {output_file_csv} and {output_file_png}")
+    logging.info(
+        f"Saved overview table for {experiment} to {output_file_csv} and {output_file_png}"
+    )
+
+
+def plot_skill_score_scatter(
+    model_params, experiment, output_dir, logging, clim_start_year, clim_end_year
+):
+
+    # Number of parameters to plot
+    param_keys = list(model_params[next(iter(model_params))].keys())
+    # clean pramater list
+    param_keys.remove("ensemble_id")
+    if "TUPP" in param_keys:
+        param_keys.remove("TUPP")
+    num_params = len(param_keys)
+
+    # Create subplots with one row per variable and one column per parameter
+    fig, axes = plt.subplots(1, num_params, figsize=(30, 5), sharey="row")
+
+    for j, param_key in enumerate(param_keys):
+        ax = axes[j]
+        x_values = []
+        y_values = []
+
+        # Read the CSV file
+        skill_score_csv = os.path.join(output_dir, f"{experiment}_overview_table.csv")
+        df = pd.read_csv(skill_score_csv)
+
+        if param_key == "V_CRIT_ALPHA":
+            search_key = "V_CRIT"
+        else:
+            search_key = param_key
+        x_values = df[search_key].values
+        y_values = df["overall_score"].values
+
+        fit = _simple_regplot(
+            x_values,
+            y_values,
+            n_std=2,
+            n_pts=100,
+            ax=ax,
+            scatter_kws={"color": "dodgerblue", "edgecolor": "black", "s": 50},
+            line_kws={"color": "red", "linestyle": "-", "linewidth": 2},
+            ci_kws=None,
+        )
+        ax.text(
+            0.05,
+            0.05,
+            f"N={fit.nobs:.0f}\nSlope={fit.params[1]:.2f}\nIntercept={fit.params[0]:.2f}\n$R^2$={fit.rsquared**2:.2f}",
+            transform=ax.transAxes,
+            fontsize=10,
+            verticalalignment="bottom",
+            bbox=dict(facecolor="white", alpha=0.8),
+        )
+
+        # ax.set_xlabel(param_key)
+        if j == 0:
+            ax.set_ylabel(f"overall skill score", fontsize=16, fontweight="bold")
+        ax.set_title(param_key, fontsize=20, fontweight="bold")
+
+    plt.subplots_adjust(top=0.8)
+    plt.suptitle(
+        f"HadCM3BL-C / {experiment} / ensemble skill score / {clim_start_year}-{clim_end_year} / BL",
+        fontsize=20,
+        fontweight="regular",
+        y=0.98,
+    )
+
+    output_file = os.path.join(
+        output_dir, f"{experiment}_overall_skill_core_param_scatter.pdf"
+    )
+
+    plt.savefig(output_file)
+    plt.close(fig)
+
+    logging.info(f"Saved scatter plot for overall skill score to {output_file}")
+
+
+def find_geo_coords(ds):
+    """
+    Find the latitude and longitude variable names in a xarray dataset.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset to search for latitude and longitude variable names.
+
+    Returns
+    -------
+    tuple
+        A tuple containing the longitude and latitude variable names.
+
+    Raises
+    ------
+    ValueError
+        If the latitude or longitude variable names cannot be determined automatically.
+    """
+    possible_lat_names = ["latitude", "lat", "LAT", "Latitude"]
+    possible_lon_names = ["longitude", "lon", "LON", "Longitude"]
+
+    lat_name = None
+    lon_name = None
+
+    for var in ds.coords:
+        if var in possible_lat_names:
+            lat_name = var
+        if var in possible_lon_names:
+            lon_name = var
+
+    if lat_name is None or lon_name is None:
+        raise ValueError(
+            "Could not automatically determine the latitude or longitude variable names."
+        )
+
+    return lon_name, lat_name
+
+
+def add_cyclic_point(data, coord):
+    """
+    Add a cyclic (wrap-around) point to the data array and coordinate.
+    """
+    cyclic_data = xr.concat([data, data.isel({coord: 0})], dim=coord)
+    cyclic_coord = np.append(data[coord], data[coord][0] + 360)
+    cyclic_data[coord] = cyclic_coord
+    return cyclic_data
+
+
+def plot_filled_map(
+    ax,
+    data,
+    type="contourf",
+    cmap="viridis",
+    levels=None,
+    colorbar=True,
+    extent=None,
+    labels=True,
+    title="",
+    **kwargs,
+):
+    """
+    Plot a filled map of a variable in an xarray dataset using standard matplotlib plotting.
+
+    Parameters:
+    - ax (matplotlib.axes.Axes): The axes to plot the map on.
+    - data (xarray.DataArray): The data to plot.
+    - type (str, optional): The type of plot to create. Default is "contourf".
+    - cmap (matplotlib.colors.Colormap, optional): The colormap to use. Default is "viridis".
+    - levels (array-like, optional): The explicit levels for contourf or pcolormesh plot. Default is None.
+    - **kwargs: Additional keyword arguments to pass to the plot function.
+
+    Returns:
+    - p (matplotlib.contour.QuadContourSet or matplotlib.collections.QuadMesh): The plot object.
+
+    """
+
+    lon_name, lat_name = find_geo_coords(data)
+
+    # Handle cyclic longitude if necessary
+    if data[lon_name].max() > 180:
+        data = add_cyclic_point(data, lon_name)
+
+    if type == "contourf":
+        p = ax.contourf(
+            data[lon_name],
+            data[lat_name],
+            data,
+            transform=ccrs.PlateCarree(),
+            cmap=cmap,
+            levels=levels,
+            extend="both",
+            **kwargs,
+        )
+    elif type == "pcolormesh":
+        # Create a colormap based on levels for discrete color mapping
+        if levels is not None:
+            norm = mcolors.BoundaryNorm(levels, ncolors=cmap.N, clip=True)
+
+        p = ax.pcolormesh(
+            data[lon_name],
+            data[lat_name],
+            data,
+            transform=ccrs.PlateCarree(),
+            cmap=cmap,
+            norm=norm,
+            **kwargs,
+        )
+
+    # Set the geographic extent if specified
+    if extent:
+        ax.set_extent(extent, crs=ccrs.PlateCarree())
+
+    # Add gridlines and labels
+    gl = ax.gridlines(
+        draw_labels=labels,
+        linewidth=1,
+        color="gray",
+        alpha=0.5,
+        linestyle="--",
+        x_inline=False,
+        y_inline=False,
+    )
+    gl.top_labels = False
+    gl.xlabel_style = {"size": 8, "color": "black"}
+    gl.ylabel_style = {"size": 8, "color": "black"}
+
+    ax.set_title(title)
+
+    if colorbar:
+        cbar = plt.colorbar(p, ax=ax, orientation="vertical", pad=0.05, shrink=0.7)
+        # cbar.set_label('variable name(K)')
+
+    return p
+
+
+def plot_PFT_maps(
+    model_params,
+    data_dir,
+    experiment,
+    output_dir,
+    logging,
+    clim_start_year,
+    clim_end_year,
+    highlight_ids=None,
+):
+
+    # ceate subplots, with 3 rows (trees, grass, bare soil) and one column for each ensemble member + one for the observations
+    pfts_to_plot = ["trees", "grass", "bare_soil"]
+    fig, axes = plt.subplots(
+        len(pfts_to_plot),
+        len(highlight_ids) + 1,
+        figsize=(5 * (len(highlight_ids) + 1), 3.5 * len(pfts_to_plot)),
+        subplot_kw={'projection': ccrs.Robinson()}
+    )
+
+    # plot the observations
+    obs = xr.open_dataset('./observations/qrparm.veg.frac_igbp.pp.nc', decode_times=False)['fracPFTs_snp_srf'].squeeze()
+    obs_remap = xr.open_dataset('./observations/qrparm.veg.frac_igbp.pp.hadcm3bl.nc', decode_times=False).squeeze()
+    # pfts = {0: "BL", 1: "NL", 2: "C3", 3: "C4", 4: "shrub", 7: "bare_soil"}
+
+    for i, pft in enumerate(pfts_to_plot):
+        if pft == "trees":
+            pft_frac = obs.isel(pseudo=0) + obs.isel(pseudo=1)
+            obs_remap["trees"] = obs_remap['fracPFTs_snp_srf'].isel(pseudo=0) + obs_remap['fracPFTs_snp_srf'].isel(pseudo=1)
+        elif pft == "grass":
+            pft_frac = obs.isel(pseudo=2) + obs.isel(pseudo=3)
+            obs_remap["grass"] = obs_remap['fracPFTs_snp_srf'].isel(pseudo=2) + obs_remap['fracPFTs_snp_srf'].isel(pseudo=3)
+        elif pft == "bare_soil":
+            pft_frac = obs.isel(pseudo=7)
+            obs_remap["bare_soil"] = obs_remap['fracPFTs_snp_srf'].isel(pseudo=7)
+        plot_filled_map(
+            axes[i][0],
+            pft_frac,
+            type="pcolormesh",
+            cmap=plt.cm.RdYlGn,
+            levels=np.linspace(0, 1, 11),
+            colorbar=False,
+            extent=None,
+            labels=False,
+            title=f"{pft} / IGBP obs",
+        )
+
+    # plot the model data
+    for j, (id, description) in enumerate(highlight_ids.items()):
+        print(id)
+        metric_file = os.path.join(
+            data_dir,
+            id,
+            "processed",
+            "global_veg_fractions",
+            f"{id}_global_veg_fractions.combined.nc",
+        )
+        data = _load_data(metric_file, f"BL_2D", logging)
+        if data is not None:
+            data["t"] = _convert_time(data)
+            clim = data.sel(t=slice(str(clim_start_year), str(clim_end_year))).mean("t")
+            for i, pft in enumerate(pfts_to_plot):
+                if pft == "trees":
+                    pft_frac = clim["BL_2D"] + clim["NL_2D"]
+                elif pft == "grass":
+                    pft_frac = clim["C3_2D"] + clim["C4_2D"]
+                elif pft == "bare_soil":
+                    pft_frac = clim["bare_soil_2D"]
+
+                rmse = np.sqrt(np.mean((pft_frac - obs_remap[pft])**2))
+
+                im = plot_filled_map(
+                    axes[i][j+1],
+                    pft_frac,
+                    type="pcolormesh",
+                    cmap=plt.cm.RdYlGn,
+                    levels=np.linspace(0, 1, 11),
+                    colorbar=False,
+                    extent=None,
+                    labels=False,
+                    title=f"{pft} / {id} / {description} / rmse = {rmse:.2f}",
+                )
+
+    cbar_ax = fig.add_axes([0.2, 0.05, 0.6, 0.03])  # Adjust the axes dimensions as necessary
+    cbar = fig.colorbar(im, cax=cbar_ax, orientation='horizontal', extend='neither', label='fractional coverage')
+
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.93, bottom=0.1)
+    plt.suptitle(
+        f"HadCM3BL-C / {experiment} / PFT clims / {clim_start_year}-{clim_end_year}",
+        fontsize=20,
+        fontweight="regular",
+        y=0.99,
+    )
+
+    output_file = os.path.join(output_dir, f"{experiment}_PFT_maps.pdf")
+    plt.savefig(output_file)
+    plt.close()
+
+    logging.info(f"Saved plot for PFT maps to {output_file}")
