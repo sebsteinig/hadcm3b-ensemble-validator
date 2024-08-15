@@ -30,18 +30,18 @@ logging.basicConfig(
     ],
 )
 
-metrics = ["global_productivity_fluxes"]
-# metrics = ["global_productivity_fluxes", "global_carbon_stores", "RECCAP_stores_vs_fluxes"]
-# metrics = ["global_carbon_stores"]
+# metrics = ["RECCAP_stores_vs_fluxes"]
+# metrics = ["global_productivity_fluxes", "global_carbon_stores", "RECCAP_stores_vs_fluxes", "overview_table", "PFT_maps"]
+# metrics = ["RECCAP_stores_vs_fluxes", "overview_table", "PFT_maps"]
 # metrics = ["global_veg_fractions"]
 # metrics = ["RECCAP_stores_vs_fluxes"]
-# metrics = ["overview_table"]
+metrics = ["overview_table"]
 # metrics = ["PFT_maps"]
 
 # these ensemble members will be highlighted in the scatter plots
 # this is also the list of IDs used in the PFT maps
-# highlight_ids = {"xQabn": "#1 score", "xQaby": "#2 score", "xqaBn": "#3 score", "xpwca": "acang", "xpwcn" : "no mods control"}
-highlight_ids = {"xpzna": "#1 score", "xpznb": "#2 score", "xpznc": "#3 score"}
+highlight_ids = {"xQabn": "#1 score", "xQaby": "#2 score", "XqAbw": "#4 score", "xpwca": "acang", "xpwcn" : "no mods control"}
+# highlight_ids = {"xpzna": "control"}
 
 # metrics to include in overview table and skill score calculation
 selected_metrics = {
@@ -75,9 +75,9 @@ def main(experiment):
             "global_carbon_stores",
             "global_veg_fractions",
         ]:
-            # plot_timeseries(
-            #     metric, model_params, data_dir, experiment, output_dir, logging
-            # )
+            plot_timeseries(
+                metric, model_params, data_dir, experiment, output_dir, logging
+            )
             plot_parameter_scatter(
                 metric,
                 model_params,
@@ -98,6 +98,7 @@ def main(experiment):
                 logging,
                 clim_start_year,
                 clim_end_year,
+                highlight_ids
             )
         elif metric == "overview_table":
             plot_overview_table(
@@ -117,6 +118,7 @@ def main(experiment):
                 logging,
                 clim_start_year,
                 clim_end_year,
+                highlight_ids
             )
         elif metric == "PFT_maps":
             plot_PFT_maps(

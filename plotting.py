@@ -15,6 +15,8 @@ import cartopy.crs as ccrs
 from common import load_reccap_mask, read_csv_to_dict
 from tqdm import tqdm
 
+highlight_colors = ["tab:red", "tab:green", "tab:orange", "tab:purple", "tab:brown", "tab:pink", "tab:gray", "tab:olive", "tab:cyan", "tab:blue"]
+
 
 def _get_variables(metric, model_params, data_dir):
     # collect all data_vars from all files to determine the subplot grid
@@ -130,8 +132,9 @@ def _simple_regplot(
     ax = plt.gca() if ax is None else ax
 
     # filter out nan values
+    x = np.array(x)
+    y = np.array(y)
     mask = np.isfinite(x) & np.isfinite(y)
-    print(mask)
     x = x[mask]
     y = y[mask]
 
@@ -180,9 +183,13 @@ def _simple_regplot(
             ax.scatter(
                 x_values_highlight[j],
                 y_values_highlight[j],
-                color="red",
+                color=highlight_colors[j],
+                edgecolor="black",  # black outline
                 label=f"{id} ({description})",
+                s=200,
+                zorder = 100
             )
+        ax.legend(loc='upper right', fontsize='small')
 
     return fit_results
 
@@ -335,6 +342,8 @@ def plot_parameter_scatter(
                     if np.isnan(y_value):
                         continue
                     x_value = params[param_key][0]  # focus on BL parameter
+                    if x_value == -9999:
+                        x_value = 0.5
                     x_values.append(x_value)
                     y_values.append(y_value)
                     units = data[var].attrs["units"]
@@ -355,7 +364,6 @@ def plot_parameter_scatter(
                 x_values_highlight=x_values_highlight,
                 y_values_highlight=y_values_highlight,
             )
-            print(x_valaues_highlight)
             ax.text(
                 0.05,
                 0.95,
@@ -413,10 +421,13 @@ def _process_data(data, var, clim_start_year, clim_end_year):
 
 
 def _get_RECCAP_data(
-    model_params, data_dir, region, realm, clim_start_year, clim_end_year, logging
+    model_params, data_dir, region, realm, clim_start_year, clim_end_year, logging, highlight_ids=None
 ):
     x_values = []
     y_values = []
+    x_values_highlight = []
+    y_values_highlight = []
+
     for id, params in model_params.items():
         flux_file = os.path.join(
             data_dir,
@@ -456,10 +467,13 @@ def _get_RECCAP_data(
             if flux_clim is not None and store_clim is not None:
                 x_values.append(flux_clim)
                 y_values.append(store_clim)
+            if highlight_ids is not None and id in highlight_ids:
+                x_values_highlight.append(flux_clim)
+                y_values_highlight.append(store_clim)
             else:
                 continue
 
-    return x_values, y_values
+    return x_values, y_values, x_values_highlight, y_values_highlight
 
 
 def _add_rectangle(ax, x_mean, x_error, y_mean, y_error):
@@ -501,13 +515,23 @@ def _add_cross(ax, x_mean, x_error, y_mean, y_error):
 
 
 def _add_legend(ax):
-    # add custom legend handles for the rectangle and cross
+    # Retrieve existing legend handles and labels
+    handles, labels = ax.get_legend_handles_labels()
+    
+    # Create custom legend handles
     rectangle_patch = patches.Patch(color="gray", alpha=0.5, label="CMIP6")
     cross_lines = mlines.Line2D([], [], color="black", linewidth=2, label="RECCAP2")
-    ax.legend(handles=[rectangle_patch, cross_lines])
+    
+    # Add the custom handles to the existing ones
+    handles.extend([rectangle_patch, cross_lines])
+    labels.extend(["CMIP6", "RECCAP2"])
+    
+    # Update the legend with the new combined handles and labels
+    ax.legend(handles=handles, labels=labels, fontsize="small")
 
 
-def _draw_RECCAP_scatter(x_values, y_values, ax, region, realm, markersize=50):
+
+def _draw_RECCAP_scatter(x_values, y_values, ax, region, realm, markersize, highlight_ids, x_values_highlight, y_values_highlight):
     # add ensemble data
     ax.scatter(
         x_values,
@@ -517,6 +541,21 @@ def _draw_RECCAP_scatter(x_values, y_values, ax, region, realm, markersize=50):
         s=markersize,
         zorder=100,
     )
+
+    # highlight specific points
+    if highlight_ids is not None:
+        for j, (id, description) in enumerate(highlight_ids.items()):
+            ax.scatter(
+                x_values_highlight[j],
+                y_values_highlight[j],
+                color=highlight_colors[j],
+                edgecolor="black",  # black outline
+                label=f"{id} ({description})",
+                s=markersize*2,
+                zorder = 100
+            )
+        ax.legend(loc='upper right', fontsize='small')
+
     # read in reference data from CSV
     cmip6_mean_values = read_csv_to_dict("./observations/stores_vs_fluxes_cmip6.csv")
     cmip6_error_values = read_csv_to_dict(
@@ -575,17 +614,19 @@ def plot_RECCAP_stores_vs_fluxes(
     logging,
     clim_start_year,
     clim_end_year,
+    highlight_ids
 ):
 
     # start with global plots of Veg carbon vs GPP and Soil carbon vs. tau (CS/soil_resp)
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
 
-    x_values, y_values = _get_RECCAP_data(
-        model_params, data_dir, "global", "veg", clim_start_year, clim_end_year, logging
+    print(highlight_ids)
+    x_values, y_values, x_values_highlight, y_values_hightlight = _get_RECCAP_data(
+        model_params, data_dir, "global", "veg", clim_start_year, clim_end_year, logging, highlight_ids
     )
-    _draw_RECCAP_scatter(x_values, y_values, axes[0], "global", "veg", 50)
+    _draw_RECCAP_scatter(x_values, y_values, axes[0], "global", "veg", 50, highlight_ids, x_values_highlight, y_values_hightlight)
 
-    x_values, y_values = _get_RECCAP_data(
+    x_values, y_values, x_values_highlight, y_values_hightlight = _get_RECCAP_data(
         model_params,
         data_dir,
         "global",
@@ -593,8 +634,9 @@ def plot_RECCAP_stores_vs_fluxes(
         clim_start_year,
         clim_end_year,
         logging,
+        highlight_ids
     )
-    _draw_RECCAP_scatter(x_values, y_values, axes[1], "global", "soil", 50)
+    _draw_RECCAP_scatter(x_values, y_values, axes[1], "global", "soil", 50, highlight_ids, x_values_highlight, y_values_hightlight)
 
     plt.tight_layout()
     plt.subplots_adjust(top=0.85)
@@ -621,7 +663,7 @@ def plot_RECCAP_stores_vs_fluxes(
     for realm in realms:
         fig, axes = plt.subplots(4, 3, figsize=(15, 20))
         for i, region in enumerate(regions.values()):
-            x_values, y_values = _get_RECCAP_data(
+            x_values, y_values, x_values_highlight, y_values_hightlight = _get_RECCAP_data(
                 model_params,
                 data_dir,
                 f"RECCAP_{region}",
@@ -629,9 +671,10 @@ def plot_RECCAP_stores_vs_fluxes(
                 clim_start_year,
                 clim_end_year,
                 logging,
+                highlight_ids
             )
             _draw_RECCAP_scatter(
-                x_values, y_values, axes.flatten()[i], region, realm, 100
+                x_values, y_values, axes.flatten()[i], region, realm, 100, highlight_ids, x_values_highlight, y_values_hightlight
             )
 
         axes[3, 1].remove()
@@ -696,7 +739,10 @@ def plot_overview_table(
             # Get the first value for each key
             if isinstance(value, list):
                 if key == "V_CRIT_ALPHA":
-                    row_data["V_CRIT"] = value[0]
+                    if value[0] == -9999:  
+                        row_data["V_CRIT"] = np.nan
+                    else:
+                        row_data["V_CRIT"] = value[0]
                 else:
                     row_data[key] = value[0]
             elif key == "ensemble_id":
@@ -870,7 +916,7 @@ def plot_overview_table(
 
 
 def plot_skill_score_scatter(
-    model_params, experiment, output_dir, logging, clim_start_year, clim_end_year
+    model_params, experiment, output_dir, logging, clim_start_year, clim_end_year, highlight_ids=None,
 ):
 
     # Number of parameters to plot
@@ -900,6 +946,14 @@ def plot_skill_score_scatter(
         x_values = df[search_key].values
         y_values = df["overall_score"].values
 
+        x_values_highlight = []
+        y_values_highlight = []
+        if highlight_ids is not None:
+            for j, (id, description) in enumerate(highlight_ids.items()):
+                id_index = df.index[df["ID"] == id].tolist()
+                x_values_highlight.append(x_values[id_index[0]])
+                y_values_highlight.append(y_values[id_index[0]])
+
         fit = _simple_regplot(
             x_values,
             y_values,
@@ -909,6 +963,9 @@ def plot_skill_score_scatter(
             scatter_kws={"color": "dodgerblue", "edgecolor": "black", "s": 50},
             line_kws={"color": "red", "linestyle": "-", "linewidth": 2},
             ci_kws=None,
+            highlight_ids=highlight_ids,
+            x_values_highlight=x_values_highlight,
+            y_values_highlight=y_values_highlight,
         )
         ax.text(
             0.05,
@@ -1114,7 +1171,7 @@ def plot_PFT_maps(
         elif pft == "bare_soil":
             pft_frac = obs.isel(pseudo=7)
             obs_remap["bare_soil"] = obs_remap['fracPFTs_snp_srf'].isel(pseudo=7)
-        plot_filled_map(
+        im = plot_filled_map(
             axes[i][0],
             pft_frac,
             type="pcolormesh",
