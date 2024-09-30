@@ -238,7 +238,7 @@ def global_carbon_stores(data_dir, id, output_dir, logging):
     logging.info(f"Global carbon stores timeseries for id {id} saved to {output_file}.")
 
 
-def _calculate_veg_metrics(ds, var_name, surface_name):
+def _calculate_veg_metrics(ds, var_name, surface_name, type="model"):
 
     ds_global_mean = xr.Dataset()
     ds_global_mean["time"] = ds["t"]
@@ -290,8 +290,21 @@ def _calculate_veg_metrics(ds, var_name, surface_name):
     nh_trees = nh_mean[var_name].isel({surface_name: [0, 1]}).sum(dim=surface_name)
     ds_global_mean[f"NH_trees_30N_90N"] = nh_trees
 
+    # calculate RMSE for model data
+    if type == "model":
+        obs_ds = xr.open_dataset(f"./observations/qrparm.veg.frac_igbp.pp.hadcm3bl.nc", decode_times=False)
+        for pft_id, pft_name in pfts.items():
+            data_model = ds[var_name].isel({surface_name: pft_id})
+            data_obs = obs_ds["fracPFTs_snp_srf"].isel({"pseudo": pft_id}).squeeze()
+            rmse =  np.sqrt(((data_model - data_obs) ** 2).mean(['latitude', 'longitude']))
+            ds_global_mean[f"rmse_{pft_name}"] = rmse
+
+
     for var in ds_global_mean.data_vars:
-        ds_global_mean[var].attrs["units"] = "fraction"
+        if var.startswith("rmse"):
+            ds_global_mean[var].attrs["units"] = "rmse"
+        else:
+            ds_global_mean[var].attrs["units"] = "fraction"
 
     return ds_global_mean
 
@@ -303,7 +316,7 @@ def global_veg_fractions_model(data_dir, id, output_dir, logging):
     if ds is None:
         return
 
-    ds_global_mean = _calculate_veg_metrics(ds, vars_to_load[0], "pseudo_2")
+    ds_global_mean = _calculate_veg_metrics(ds, vars_to_load[0], "pseudo_2", type="model")
 
     # write the results to a new NetCDF file
     output_file = (
@@ -320,7 +333,7 @@ def global_veg_fractions_obs(obs_file, logging):
     if ds_obs is None:
         return
 
-    ds_obs_mean = _calculate_veg_metrics(ds_obs, "fracPFTs_snp_srf", "pseudo")
+    ds_obs_mean = _calculate_veg_metrics(ds_obs, "fracPFTs_snp_srf", "pseudo", type="obs")
 
     # write the results to a new NetCDF file
     output_file_obs = f"./observations/igbp.veg_fraction_metrics.nc"

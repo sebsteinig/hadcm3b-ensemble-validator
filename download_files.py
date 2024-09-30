@@ -10,6 +10,7 @@ from common import parse_jobs, create_directory
 
 # UM output streams to download
 streams = ["pi", "pj", "da"]
+#streams = ["pi", "pj"]
 # user settings
 username = os.getlogin()
 # storage on BRIDGE servers
@@ -153,6 +154,7 @@ def main(experiment):
     logging.info(f"Read {len(model_params)} IDs from log file")
     
     for id, params in model_params.items():
+    # for id, params in reversed(list(model_params.items())):
         # if id != "xqaba":
         #     break
         id_local_dir = os.path.join(local_data_dir, id)

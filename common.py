@@ -133,14 +133,14 @@ def get_table_metrics(selected_metrics):
         "GPP": {
             "var_name": "global_sum_GPP",
             "metric_realm": "global_productivity_fluxes",
-            "target_min": 110,
-            "target_max": 130,
+            "target_min": 102, # https://www.science.org/doi/10.1126/science.1184984
+            "target_max": 135,
         },
         "CVeg": {
             "var_name": "global_sum_VEG_C",
             "metric_realm": "global_carbon_stores",
-            "target_min": 500,
-            "target_max": 600,
+            "target_min": 380, # https://www.nature.com/articles/nature25138
+            "target_max": 536,
         },
         "CSoil": {
             "var_name": "global_sum_SOIL_C",
@@ -160,11 +160,61 @@ def get_table_metrics(selected_metrics):
             "target_min": 0.20 - 0.05,
             "target_max": 0.20 + 0.05,
         },
-        "BareSoil": {
+        "AMZTrees": {
+            "var_name": "amazon_trees",
+            "metric_realm": "global_veg_fractions",
+            "target_min": 0.61 - 0.05,
+            "target_max": 0.61 + 0.05,
+        },
+        "GM_BL": {
+            "var_name": "global_mean_BL",
+            "metric_realm": "global_veg_fractions",
+            "target_min": 0.16 - 0.05,
+            "target_max": 0.16 + 0.05,
+        },
+        "GM_NL": {
+            "var_name": "global_mean_NL",
+            "metric_realm": "global_veg_fractions",
+            "target_min": 0.06 - 0.05,
+            "target_max": 0.06 + 0.05,
+        },
+        "GM_C3": {
+            "var_name": "global_mean_C3",
+            "metric_realm": "global_veg_fractions",
+            "target_min": 0.23 - 0.05,
+            "target_max": 0.23 + 0.05,
+        },
+        "GM_C4": {
+            "var_name": "global_mean_C4",
+            "metric_realm": "global_veg_fractions",
+            "target_min": 0.09 - 0.05,
+            "target_max": 0.09 + 0.05,
+        },
+        "GM_BS": {
             "var_name": "global_mean_bare_soil",
             "metric_realm": "global_veg_fractions",
             "target_min": 0.26 - 0.05,
             "target_max": 0.26 + 0.05,
+        },
+        "rmse_BL": {
+            "var_name": "rmse_BL",
+            "metric_realm": "global_veg_fractions",
+        },
+        "rmse_NL": {
+            "var_name": "rmse_NL",
+            "metric_realm": "global_veg_fractions",
+        },
+        "rmse_C3": {
+            "var_name": "rmse_C3",
+            "metric_realm": "global_veg_fractions",
+        },
+        "rmse_C4": {
+            "var_name": "rmse_C4",
+            "metric_realm": "global_veg_fractions",
+        },
+        "rmse_BS": {
+            "var_name": "rmse_bare_soil",
+            "metric_realm": "global_veg_fractions",
         },
     }
 

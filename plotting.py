@@ -15,8 +15,32 @@ import cartopy.crs as ccrs
 from common import load_reccap_mask, read_csv_to_dict
 from tqdm import tqdm
 
-highlight_colors = ["tab:red", "tab:green", "tab:orange", "tab:purple", "tab:brown", "tab:pink", "tab:gray", "tab:olive", "tab:cyan", "tab:blue"]
-
+highlight_colors = [
+    "black", 
+    "tab:red", 
+    "tab:green", 
+    "tab:orange", 
+    "tab:purple", 
+    "tab:brown", 
+    "tab:pink", 
+    "tab:gray", 
+    "tab:olive", 
+    "tab:cyan", 
+    "tab:blue", 
+    "yellow", 
+    "lightblue", 
+    "darkgreen", 
+    "magenta", 
+    "lightgray", 
+    "lime", 
+    "darkred", 
+    "darkorange", 
+    "teal", 
+    "gold",
+    "lightcoral",
+    "darkviolet",
+    "deepskyblue"
+]
 
 def _get_variables(metric, model_params, data_dir):
     # collect all data_vars from all files to determine the subplot grid
@@ -78,21 +102,21 @@ def _convert_time(ds):
 def add_observation_lines(ax, var, metric):
     if var == "global_sum_GPP":
         ax.axhline(
-            y=110, color="k", linestyle="--", linewidth=2.0, label="target (min)"
+            y=102, color="k", linestyle="--", linewidth=2.0, label="target (min)"
         )
         ax.axhline(
-            y=120, color="k", linestyle="-", linewidth=3.0, label="target (mean)"
+            y=123, color="k", linestyle="-", linewidth=3.0, label="target (mean)"
         )
         ax.axhline(
-            y=130, color="k", linestyle="--", linewidth=2.0, label="target (max)"
+            y=135, color="k", linestyle="--", linewidth=2.0, label="target (max)"
         )
     elif var == "global_sum_NPP":
         ax.axhline(y=50, color="k", linestyle="--", linewidth=2.0, label="target (min)")
         ax.axhline(y=60, color="k", linestyle="-", linewidth=3.0, label="target (mean)")
         ax.axhline(y=70, color="k", linestyle="--", linewidth=2.0, label="target (max)")
     elif var == "global_sum_VEG_C":
-        ax.axhline(y=500, color="k", linestyle="-", linewidth=3.0, label="target (min)")
-        ax.axhline(y=600, color="k", linestyle="-", linewidth=3.0, label="target (max)")
+        ax.axhline(y=380, color="k", linestyle="-", linewidth=3.0, label="target (min)")
+        ax.axhline(y=536, color="k", linestyle="-", linewidth=3.0, label="target (max)")
     elif var == "global_sum_SOIL_C":
         ax.axhline(
             y=1000, color="k", linestyle="-", linewidth=3.0, label="target (min)"
@@ -126,52 +150,52 @@ def add_observation_lines(ax, var, metric):
 
 # adapted from https://stackoverflow.com/a/59756979/3565452
 def _simple_regplot(
-    x, y, n_std=2, n_pts=100, ax=None, scatter_kws=None, line_kws=None, ci_kws=None, highlight_ids=None, x_values_highlight=None, y_values_highlight=None
+    x, y, n_std=2, n_pts=100, ax=None, scatter_kws=None, line_kws=None, ci_kws=None, highlight_ids=None, x_values_highlight=None, y_values_highlight=None, show_legend = True
 ):
     """Draw a regression line with error interval."""
     ax = plt.gca() if ax is None else ax
 
     # filter out nan values
-    x = np.array(x)
-    y = np.array(y)
-    mask = np.isfinite(x) & np.isfinite(y)
-    x = x[mask]
-    y = y[mask]
+    # x = np.array(x)
+    # y = np.array(y)
+    # mask = np.isfinite(x) & np.isfinite(y)
+    # x = x[mask]
+    # y = y[mask]
 
-    # calculate best-fit line and interval
-    x_fit = sm.add_constant(x)
-    fit_results = sm.OLS(y, x_fit).fit()
+    # # calculate best-fit line and interval
+    # x_fit = sm.add_constant(x)
+    # fit_results = sm.OLS(y, x_fit).fit()
 
-    eval_x = sm.add_constant(np.linspace(np.min(x), np.max(x), n_pts))
-    pred = fit_results.get_prediction(eval_x)
+    # eval_x = sm.add_constant(np.linspace(np.min(x), np.max(x), n_pts))
+    # pred = fit_results.get_prediction(eval_x)
 
-    # draw the fit line and error interval
-    ci_kws = {} if ci_kws is None else ci_kws
-    ax.fill_between(
-        eval_x[:, 1],
-        pred.predicted_mean - n_std * pred.se_mean,
-        pred.predicted_mean + n_std * pred.se_mean,
-        alpha=0.3,
-        color="lightcoral",
-    )
+    # # draw the fit line and error interval
+    # ci_kws = {} if ci_kws is None else ci_kws
+    # ax.fill_between(
+    #     eval_x[:, 1],
+    #     pred.predicted_mean - n_std * pred.se_mean,
+    #     pred.predicted_mean + n_std * pred.se_mean,
+    #     alpha=0.3,
+    #     color="lightcoral",
+    # )
 
-    ax.plot(
-        eval_x[:, 1],
-        pred.predicted_mean - n_std * pred.se_mean,
-        linestyle="--",
-        color="lightcoral",
-        **ci_kws,
-    )
-    ax.plot(
-        eval_x[:, 1],
-        pred.predicted_mean + n_std * pred.se_mean,
-        linestyle="--",
-        color="lightcoral",
-        **ci_kws,
-    )
+    # ax.plot(
+    #     eval_x[:, 1],
+    #     pred.predicted_mean - n_std * pred.se_mean,
+    #     linestyle="--",
+    #     color="lightcoral",
+    #     **ci_kws,
+    # )
+    # ax.plot(
+    #     eval_x[:, 1],
+    #     pred.predicted_mean + n_std * pred.se_mean,
+    #     linestyle="--",
+    #     color="lightcoral",
+    #     **ci_kws,
+    # )
 
-    line_kws = {} if line_kws is None else line_kws
-    h = ax.plot(eval_x[:, 1], pred.predicted_mean, **line_kws)
+    # line_kws = {} if line_kws is None else line_kws
+    # h = ax.plot(eval_x[:, 1], pred.predicted_mean, **line_kws)
 
     # draw the scatterplot
     scatter_kws = {} if scatter_kws is None else scatter_kws
@@ -180,6 +204,8 @@ def _simple_regplot(
     # highlight specific points
     if highlight_ids is not None:
         for j, (id, description) in enumerate(highlight_ids.items()):
+            print(id)
+            print(highlight_colors[j])
             ax.scatter(
                 x_values_highlight[j],
                 y_values_highlight[j],
@@ -189,9 +215,13 @@ def _simple_regplot(
                 s=200,
                 zorder = 100
             )
-        ax.legend(loc='upper right', fontsize='small')
+        # ax.legend(loc='upper right', fontsize='small')
+        if show_legend :
+            ax.legend(loc='upper left', fontsize='small', bbox_to_anchor=(1.05, 1), borderaxespad=0.)
 
-    return fit_results
+    # return fit_results
+    return None
+
 
 
 def plot_timeseries(metric, model_params, data_dir, experiment, output_dir, logging):
@@ -364,15 +394,16 @@ def plot_parameter_scatter(
                 x_values_highlight=x_values_highlight,
                 y_values_highlight=y_values_highlight,
             )
-            ax.text(
-                0.05,
-                0.95,
-                f"N={fit.nobs:.0f}\nSlope={fit.params[1]:.2f}\nIntercept={fit.params[0]:.2f}\n$R^2$={fit.rsquared**2:.2f}",
-                transform=ax.transAxes,
-                fontsize=10,
-                verticalalignment="top",
-                bbox=dict(facecolor="white", alpha=0.8),
-            )
+            if fit is not None:
+                ax.text(
+                    0.05,
+                    0.95,
+                    f"N={fit.nobs:.0f}\nSlope={fit.params[1]:.2f}\nIntercept={fit.params[0]:.2f}\n$R^2$={fit.rsquared**2:.2f}",
+                    transform=ax.transAxes,
+                    fontsize=10,
+                    verticalalignment="top",
+                    bbox=dict(facecolor="white", alpha=0.8),
+                )             
 
             ax.set_xlabel(param_key)
             if j == 0:
@@ -473,7 +504,7 @@ def _get_RECCAP_data(
             else:
                 continue
 
-    return x_values, y_values, x_values_highlight, y_values_highlight
+    return x_values, y_values, x_values_highlight[::-1], y_values_highlight[::-1]
 
 
 def _add_rectangle(ax, x_mean, x_error, y_mean, y_error):
@@ -545,6 +576,8 @@ def _draw_RECCAP_scatter(x_values, y_values, ax, region, realm, markersize, high
     # highlight specific points
     if highlight_ids is not None:
         for j, (id, description) in enumerate(highlight_ids.items()):
+            print(f"{id} ({description})")
+            print(x_values_highlight[j],y_values_highlight[j])
             ax.scatter(
                 x_values_highlight[j],
                 y_values_highlight[j],
@@ -567,8 +600,10 @@ def _draw_RECCAP_scatter(x_values, y_values, ax, region, realm, markersize, high
     )
 
     if realm == "veg":
-        ax.set_xlabel("GPP (PgC yr$^{-1}$)")
-        ax.set_ylabel("Veg Carbon (PgC)")
+        # ax.set_xlabel("GPP (PgC yr$^{-1}$)")
+        # ax.set_ylabel("Veg Carbon (PgC)")
+        ax.set_xlabel("GPP (PgC yr$^{-1}$; Beer et al. 2010)")
+        ax.set_ylabel("Veg Carbon (PgC); Erb et al. 2018")
         _add_rectangle(
             ax,
             cmip6_mean_values["GPP"][region],
@@ -576,12 +611,23 @@ def _draw_RECCAP_scatter(x_values, y_values, ax, region, realm, markersize, high
             cmip6_mean_values["CVeg"][region],
             cmip6_error_values["CVeg"][region],
         )
+        # _add_cross(
+        #     ax,
+        #     reccap_mean_values["GPP"][region],
+        #     reccap_error_values["GPP"][region],
+        #     reccap_mean_values["CVeg"][region],
+        #     reccap_error_values["CVeg"][region],
+        # )
+        # instead of RECCAP totals, we will now use:
+        # https://www.science.org/doi/10.1126/science.1184984
+        # https://www.nature.com/articles/nature25138
+        # as references (note much higher agreement with CMIP6 range)
         _add_cross(
             ax,
-            reccap_mean_values["GPP"][region],
-            reccap_error_values["GPP"][region],
-            reccap_mean_values["CVeg"][region],
-            reccap_error_values["CVeg"][region],
+            123.0,
+            8.0,
+            458.0,
+            78.0,
         )
     elif realm == "soil":
         ax.set_xlabel("tau (yrs)")
@@ -759,6 +805,11 @@ def plot_overview_table(
                 f"{id}_{target['metric_realm']}.combined.nc",
             )
             data = _load_data(metric_file, target["var_name"], logging)
+
+            # if metric_key.startswith("rmse_BL"):
+            #     print(target["var_name"])
+            #     print(data)
+            #     quit()
             # get climatology
             if data is not None:
                 data["t"] = _convert_time(data)
@@ -799,15 +850,21 @@ def plot_overview_table(
                     clim_value = None
 
             if clim_value is not None:
-                # compare with target values
-                skill_score = _calculate_skill_score(
-                    clim_value, target["target_min"], target["target_max"]
-                )
-                hit_data[metric_key] = skill_score
-                if clim_value <= 1.0:
+                if metric_key.startswith("rmse_"):
+                    # min RMSE of fractional data is 0 (highest skill), maximum is 1.0 (lowest skill)
+                    skill_score = np.max([1.0 - 3.0 * clim_value, 0.0])
+                    hit_data[metric_key] = skill_score
                     row_data[metric_key] = round(clim_value, 2)
                 else:
-                    row_data[metric_key] = round(clim_value, 1)
+                    # compare with target values
+                    skill_score = _calculate_skill_score(
+                        clim_value, target["target_min"], target["target_max"]
+                    )
+                    hit_data[metric_key] = skill_score
+                    if clim_value <= 1.0:
+                        row_data[metric_key] = round(clim_value, 2)
+                    else:
+                        row_data[metric_key] = round(clim_value, 1)
             else:
                 row_data[metric_key] = np.nan
                 hit_data[metric_key] = np.nan
@@ -935,6 +992,13 @@ def plot_skill_score_scatter(
         x_values = []
         y_values = []
 
+        print(j)
+        print(len(param_keys))
+        if j == ( len(param_keys) - 1):
+            show_legend = True
+        else:
+            show_legend = False
+            
         # Read the CSV file
         skill_score_csv = os.path.join(output_dir, f"{experiment}_overview_table.csv")
         df = pd.read_csv(skill_score_csv)
@@ -966,16 +1030,18 @@ def plot_skill_score_scatter(
             highlight_ids=highlight_ids,
             x_values_highlight=x_values_highlight,
             y_values_highlight=y_values_highlight,
+            show_legend = show_legend
         )
-        ax.text(
-            0.05,
-            0.05,
-            f"N={fit.nobs:.0f}\nSlope={fit.params[1]:.2f}\nIntercept={fit.params[0]:.2f}\n$R^2$={fit.rsquared**2:.2f}",
-            transform=ax.transAxes,
-            fontsize=10,
-            verticalalignment="bottom",
-            bbox=dict(facecolor="white", alpha=0.8),
-        )
+        if fit is not None:
+            ax.text(
+                0.05,
+                0.05,
+                f"N={fit.nobs:.0f}\nSlope={fit.params[1]:.2f}\nIntercept={fit.params[0]:.2f}\n$R^2$={fit.rsquared**2:.2f}",
+                transform=ax.transAxes,
+                fontsize=10,
+                verticalalignment="bottom",
+                bbox=dict(facecolor="white", alpha=0.8),
+            )
 
         # ax.set_xlabel(param_key)
         if j == 0:
@@ -1148,7 +1214,8 @@ def plot_PFT_maps(
 ):
 
     # ceate subplots, with 3 rows (trees, grass, bare soil) and one column for each ensemble member + one for the observations
-    pfts_to_plot = ["trees", "grass", "bare_soil"]
+    # pfts_to_plot = ["trees", "grass", "bare_soil"]
+    pfts_to_plot = ["BL_2D", "NL_2D", "C3_2D", "C4_2D", "shrub_2D", "bare_soil_2D"]
     fig, axes = plt.subplots(
         len(pfts_to_plot),
         len(highlight_ids) + 1,
@@ -1159,6 +1226,7 @@ def plot_PFT_maps(
     # plot the observations
     obs = xr.open_dataset('./observations/qrparm.veg.frac_igbp.pp.nc', decode_times=False)['fracPFTs_snp_srf'].squeeze()
     obs_remap = xr.open_dataset('./observations/qrparm.veg.frac_igbp.pp.hadcm3bl.nc', decode_times=False).squeeze()
+    obs_metrics = xr.open_dataset("./observations/igbp.veg_fraction_metrics.nc", decode_times=False).squeeze()
     # pfts = {0: "BL", 1: "NL", 2: "C3", 3: "C4", 4: "shrub", 7: "bare_soil"}
 
     for i, pft in enumerate(pfts_to_plot):
@@ -1171,6 +1239,9 @@ def plot_PFT_maps(
         elif pft == "bare_soil":
             pft_frac = obs.isel(pseudo=7)
             obs_remap["bare_soil"] = obs_remap['fracPFTs_snp_srf'].isel(pseudo=7)
+        else:
+            pft_frac = obs_metrics[pft]
+
         im = plot_filled_map(
             axes[i][0],
             pft_frac,
@@ -1204,8 +1275,11 @@ def plot_PFT_maps(
                     pft_frac = clim["C3_2D"] + clim["C4_2D"]
                 elif pft == "bare_soil":
                     pft_frac = clim["bare_soil_2D"]
+                else:
+                    pft_frac = clim[pft]
 
-                rmse = np.sqrt(np.mean((pft_frac - obs_remap[pft])**2))
+
+                # rmse = np.sqrt(np.mean((pft_frac - obs_remap[pft])**2))
 
                 im = plot_filled_map(
                     axes[i][j+1],
@@ -1216,7 +1290,8 @@ def plot_PFT_maps(
                     colorbar=False,
                     extent=None,
                     labels=False,
-                    title=f"{pft} / {id} / {description} / rmse = {rmse:.2f}",
+                    # title=f"{pft} / {id} / {description} / rmse = {rmse:.2f}",
+                    title=f"{pft} / {id} / {description}",
                 )
 
     cbar_ax = fig.add_axes([0.2, 0.05, 0.6, 0.03])  # Adjust the axes dimensions as necessary
@@ -1231,8 +1306,9 @@ def plot_PFT_maps(
         y=0.99,
     )
 
-    output_file = os.path.join(output_dir, f"{experiment}_PFT_maps.pdf")
-    plt.savefig(output_file)
+    # output_file = os.path.join(output_dir, f"{experiment}_PFT_maps.pdf")
+    output_file = os.path.join(output_dir, f"{experiment}_PFT_maps.png")
+    plt.savefig(output_file,dpi=200)
     plt.close()
 
     logging.info(f"Saved plot for PFT maps to {output_file}")
