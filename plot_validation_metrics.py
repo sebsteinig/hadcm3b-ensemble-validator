@@ -35,8 +35,8 @@ logging.basicConfig(
 # metrics = ["global_productivity_fluxes", "global_carbon_stores", "RECCAP_stores_vs_fluxes"]
 # metrics = ["global_veg_fractions"]
 # metrics = ["overview_table", "RECCAP_stores_vs_fluxes"]
+# metrics = [ "RECCAP_stores_vs_fluxes", "overview_table"]
 metrics = ["overview_table"]
-# metrics = ["PFT_maps"]
 # metrics = ["RECCAP_stores_vs_fluxes"]
 
 
@@ -55,14 +55,15 @@ metrics = ["overview_table"]
 #                  "Xqaul": "#10 score", "Xqaqp": "#11 score", "XqaRq": "#12 score", "xQaup": "#13 score", "xqAuw": "#14 score", "XqAqg": "#15 score", "xqarR": "#16 score", "XqaqW": "#17 score", "XqAux": "#18 score", "XqAuc": "#19 score", "xqaqg": "#20 score",
 #                  "xqaQh": "low VCRIT #1", "xqaRd": "low VCRIT #2", "XqArn": "low VCRIT #3"}
 # reduced
-highlight_ids = {"xqaqa": "control", "XqaqW": "#1 score", "Xqarh": "#2 score", "XqAuc": "#3 score", "xQaup": "#4 score", "XqaRq": "#5 score", "XqAuf": "#6 score", "Xqaul": "#7 score", "xqare": "#8 score", "xQaqc": "#9 score",
-                 "XqAqs": "#10 score", "Xqarp": "#11 score", "Xqaqp": "#12 score", "xqaRw": "#13 score", "xqarE": "#14 score", "XQarc": "#15 score", "XqAqg": "#16 score", "XqauI": "#17 score", "xqaqg": "#18 score", "xqaQs": "#19 score", "xqauj": "#20 score",
-                 "xqaQh": "low VCRIT #1", "xqaRd": "low VCRIT #2", "XqArn": "low VCRIT #3"}
+# highlight_ids = {"xqaqa": "control", "XqaqW": "#1 score", "Xqarh": "#2 score", "XqAuc": "#3 score", "xQaup": "#4 score", "XqaRq": "#5 score", "XqAuf": "#6 score", "Xqaul": "#7 score", "xqare": "#8 score", "xQaqc": "#9 score",
+#                  "XqAqs": "#10 score", "Xqarp": "#11 score", "Xqaqp": "#12 score", "xqaRw": "#13 score", "xqarE": "#14 score", "XQarc": "#15 score", "XqAqg": "#16 score", "XqauI": "#17 score", "xqaqg": "#18 score", "xqaQs": "#19 score", "xqauj": "#20 score",
+#                  "xqaQh": "low VCRIT #1", "xqaRd": "low VCRIT #2", "XqArn": "low VCRIT #3"}
+highlight_ids = {"XqArn_001": "control"}
 # metrics to include in overview table and skill score calculation
 selected_metrics = {
     "GPP": {"weight": 8},
     "CVeg": {"weight": 8},
-    # "CSoil": {"weight": 1},
+    "CSoil": {"weight": 16},
     "Tr30SN": {"weight": 4},
     "Tr30-90N": {"weight": 4},
     "AMZTrees": {"weight": 4},

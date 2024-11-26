@@ -9,8 +9,8 @@ import xarray as xr
 from common import parse_jobs, create_directory
 
 # UM output streams to download
-streams = ["pi", "pj", "da"]
-#streams = ["pi", "pj"]
+#streams = ["pi", "pj", "da"]
+streams = ["pi", "pj"]
 # user settings
 username = os.getlogin()
 # storage on BRIDGE servers
@@ -27,7 +27,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('download_files_from_BC4.log'),
+        # logging.FileHandler('download_files_from_BC4.log'),
         logging.StreamHandler()
     ]
 )
@@ -36,9 +36,11 @@ logging.basicConfig(
 # get list of available HPC files
 def list_remote_files(remote_dir, id, stream):
     if stream == "da":
-        remote_path = os.path.join(remote_dir, f"{id}*#{stream}*c1+")
+        # remote_path = os.path.join(remote_dir, f"{id}*#{stream}*c1+")
+        remote_path = os.path.join(remote_dir, f"*#{stream}*c1+")
     else:
-        remote_path = os.path.join(remote_dir, f"{id}*{stream}*")
+        # remote_path = os.path.join(remote_dir, f"{id}*{stream}*")
+        remote_path = os.path.join(remote_dir, f"*{stream}*")
     ssh_command = f"ssh {remote_user}@{remote_host} 'ls {remote_path}'"
     try:
         result = subprocess.check_output(ssh_command, shell=True, text=True)

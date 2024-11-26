@@ -1,3 +1,0 @@
-python download_files.py xqac_soils
-python calculate_validation_metrics.py xqac_soils
-python plot_validation_metrics.py xqac_soils
